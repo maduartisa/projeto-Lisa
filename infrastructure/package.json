@@ -1,0 +1,11 @@
+{
+  "name": "commercial-platform-infrastructure",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "synth": "cdk synth"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1146.1"
+  }
+}
