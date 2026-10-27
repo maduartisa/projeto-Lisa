@@ -11,3 +11,5 @@ Documentação do projeto:
 - [Fase 6 — Implementação local da infraestrutura CDK](docs/sdd/06-implementacao-infraestrutura-cdk.md)
 
 O projeto CDK inicial está em [`infrastructure/`](infrastructure/README.md). Ele contém somente a infraestrutura-base; não inclui a aplicação e não foi implantado na AWS.
+
+A aplicação em [`application/`](application/README.md) inclui a fundação multiempresa e os fluxos iniciais de catálogo, clientes, estoque e pedidos. Interfaces web, WhatsApp/IA e deploy continuam fora desta entrega.

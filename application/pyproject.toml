@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "commercial-platform"
+version = "0.1.0"
+description = "Multi-tenant commercial platform API"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic==1.15.2",
+    "argon2-cffi==23.1.0",
+    "email-validator==2.2.0",
+    "fastapi==0.115.12",
+    "psycopg[binary]==3.2.6",
+    "PyJWT==2.10.1",
+    "SQLAlchemy==2.0.40",
+    "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "httpx==0.28.1",
+    "pytest==8.3.5",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

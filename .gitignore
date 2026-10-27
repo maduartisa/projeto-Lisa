@@ -154,6 +154,9 @@ activemq-data/
 .envrc
 .venv
 node_modules/
+.next/
+out/
+*.tsbuildinfo
 cdk.out/
 env/
 venv/
