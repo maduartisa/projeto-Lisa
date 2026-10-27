@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
@@ -60,6 +60,7 @@ class InventoryMovementType(StrEnum):
     INITIAL = "initial"
     ADJUSTMENT = "adjustment"
     SALE = "sale"
+    PURCHASE = "purchase"
 
 
 def utc_now() -> datetime:
@@ -113,6 +114,7 @@ class TenantMembership(Base):
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(160))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     tenant: Mapped[Tenant] = relationship(back_populates="memberships")
@@ -136,6 +138,8 @@ class Product(Base):
     sku: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
+    size: Mapped[str | None] = mapped_column(String(64))
+    color: Mapped[str | None] = mapped_column(String(64))
     description: Mapped[str | None] = mapped_column(String(2000))
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     stock_quantity: Mapped[Decimal] = mapped_column(
@@ -240,7 +244,7 @@ class InventoryMovement(Base):
     __table_args__ = (
         CheckConstraint("quantity_delta != 0", name="ck_inventory_delta_nonzero"),
         CheckConstraint(
-            "movement_type IN ('initial', 'adjustment', 'sale')",
+            "movement_type IN ('initial', 'adjustment', 'sale', 'purchase')",
             name="ck_inventory_movement_type",
         ),
         ForeignKeyConstraint(
@@ -259,4 +263,123 @@ class InventoryMovement(Base):
     movement_type: Mapped[str] = mapped_column(String(16), nullable=False)
     reference_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
     note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_suppliers_tenant_id"),
+        Index("ix_suppliers_tenant_name", "tenant_id", "name"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    document: Mapped[str | None] = mapped_column(String(32))
+    contact_name: Mapped[str | None] = mapped_column(String(160))
+    phone: Mapped[str | None] = mapped_column(String(32))
+    email: Mapped[str | None] = mapped_column(String(320))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class Purchase(Base):
+    __tablename__ = "purchases"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'received', 'cancelled')",
+            name="ck_purchases_status",
+        ),
+        CheckConstraint("total >= 0", name="ck_purchases_total_nonnegative"),
+        ForeignKeyConstraint(
+            ["tenant_id", "supplier_id"],
+            ["suppliers.tenant_id", "suppliers.id"],
+            ondelete="RESTRICT",
+            name="fk_purchases_supplier_same_tenant",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_purchases_tenant_id"),
+        Index("ix_purchases_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    total: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    items: Mapped[list["PurchaseItem"]] = relationship(
+        back_populates="purchase", cascade="all, delete-orphan"
+    )
+
+
+class PurchaseItem(Base):
+    __tablename__ = "purchase_items"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_purchase_items_quantity_positive"),
+        CheckConstraint("unit_cost >= 0", name="ck_purchase_items_cost_nonnegative"),
+        CheckConstraint("line_total >= 0", name="ck_purchase_items_total_nonnegative"),
+        ForeignKeyConstraint(
+            ["tenant_id", "purchase_id"],
+            ["purchases.tenant_id", "purchases.id"],
+            ondelete="CASCADE",
+            name="fk_purchase_items_purchase_same_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "product_id"],
+            ["products.tenant_id", "products.id"],
+            ondelete="RESTRICT",
+            name="fk_purchase_items_product_same_tenant",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    purchase_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    product_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    line_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    purchase: Mapped[Purchase] = relationship(back_populates="items")
+
+
+class FinancialEntry(Base):
+    __tablename__ = "financial_entries"
+    __table_args__ = (
+        CheckConstraint("entry_type IN ('payable', 'receivable')", name="ck_financial_entries_type"),
+        CheckConstraint("status IN ('pending', 'settled', 'cancelled')", name="ck_financial_entries_status"),
+        CheckConstraint("amount > 0", name="ck_financial_entries_amount_positive"),
+        Index("ix_financial_entries_tenant_due", "tenant_id", "due_date"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    entry_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    description: Mapped[str] = mapped_column(String(240), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    due_date: Mapped[date] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AccessLog(Base):
+    __tablename__ = "access_logs"
+    __table_args__ = (
+        Index("ix_access_logs_tenant_created", "tenant_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(240), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

@@ -1,10 +1,32 @@
-# Aplicação — fundação multiempresa
+# Aplicação — automação comercial
 
-Esta entrega implementa identidade e tenancy, catálogo, clientes, estoque e o fluxo inicial de orçamento/pedido. Ainda não inclui interfaces web, integrações WhatsApp/IA nem serviços ECS.
+A aplicação reúne API FastAPI e interface web responsiva para catálogo, operação de balcão e administração multiempresa. Inclui cadastro de clientes, fornecedores e funcionários; produtos com grade de tamanho/cor por SKU; compras, estoque, pedidos, contas a pagar/receber e auditoria de acessos. O checkout online apenas envia pedido para confirmação e não processa pagamentos.
 
-A interface web responsiva está no diretório [`web/`](web/README.md).
+## Teste rápido com dados fictícios
 
-## Requisitos
+Para experimentar sem instalar PostgreSQL, abra um PowerShell na raiz do repositório e inicie a API local:
+
+```powershell
+Set-Location .\application
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[test]"
+python -m commercial_platform.demo
+```
+
+O comando cria e popula um banco SQLite isolado em `application\.local\demo.sqlite3` e escuta apenas em `127.0.0.1:8000`. Ele imprime o e-mail `admin@demo.example`, uma senha aleatória local e o identificador da empresa `demo`; use esses dados no painel. A senha fica somente no diretório local ignorado pelo Git, e não deve ser publicada nem reutilizada em produção.
+
+Em outro PowerShell, inicie o frontend:
+
+```powershell
+Set-Location .\application\web
+npm ci
+npm run dev
+```
+
+Abra `http://localhost:3000`. Os cadastros de demonstração são reinicializados apenas se o banco local for apagado; os dados criados durante o teste permanecem nesse arquivo.
+
+## Requisitos para PostgreSQL
 
 - Python 3.11+
 - PostgreSQL 17 (o mesmo major da infraestrutura aprovada)
@@ -46,14 +68,22 @@ O comando de bootstrap solicita slug, nome comercial, e-mail e senha inicial em 
 - `GET|POST /api/v1/admin/products`: consulta e cadastro de produtos por empresa.
 - `PATCH /api/v1/admin/products/{product_id}`: atualização de produto.
 - `GET|POST /api/v1/admin/customers`: consulta e cadastro de clientes por empresa.
+- `GET|POST /api/v1/admin/suppliers`: consulta e cadastro de fornecedores.
+- `GET|POST /api/v1/admin/employees`, `PATCH /api/v1/admin/employees/{membership_id}`: gestão de funcionários e acessos (administradora).
+- `GET|POST /api/v1/admin/purchases`, `PATCH /api/v1/admin/purchases/{purchase_id}/status`: compras; ao receber, registra entradas de estoque e conta a pagar.
+- `GET|POST /api/v1/admin/finance`, `PATCH /api/v1/admin/finance/{entry_id}/settle`: lançamentos financeiros e baixa de contas.
+- `GET /api/v1/admin/access-logs`: atividades autenticadas da empresa (administradora).
 - `POST /api/v1/admin/products/{product_id}/inventory`: ajuste controlado de estoque.
 - `GET /api/v1/admin/products/{product_id}/inventory`: histórico de movimentações.
 - `GET|POST /api/v1/admin/orders` e `GET /api/v1/admin/orders/{order_id}`: criação e consulta de pedidos.
 - `PATCH /api/v1/admin/orders/{order_id}/status`: transição validada de estado.
+- `POST /api/v1/public/{tenant_slug}/orders`: solicita pedido pelo catálogo; requer nome, telefone ou e-mail e modalidade de retirada/entrega. Não há cobrança. A equipe confirma o pedido e o estoque só é baixado na conclusão.
 
 O token não aceita seleção livre de tenant em headers ou parâmetros. Em cada requisição, a API verifica novamente usuário, membership, status do tenant e papel atual no banco. Quando o vínculo é revogado ou o tenant suspenso, o token deixa de autorizar acesso.
 
-Todos os recursos operacionais são consultados no escopo do tenant autenticado, reforçado por chaves estrangeiras compostas no banco. O pedido guarda preço e total do momento da cotação. O estoque só é baixado ao concluir o pedido, com linhas de movimentação correspondentes na mesma transação; falta de saldo rejeita a conclusão sem alterações parciais. O catálogo público mostra apenas disponibilidade booleana.
+Todos os recursos operacionais são consultados no escopo do tenant autenticado, reforçado por chaves estrangeiras compostas no banco. Produtos em grade são cadastrados como uma linha por combinação de atributos, com SKU, preço e estoque independentes. O pedido guarda preço e total do momento da cotação. O estoque só é baixado ao concluir um pedido, com linhas de movimentação correspondentes na mesma transação; falta de saldo rejeita a conclusão sem alterações parciais. Receber uma compra adiciona o saldo e cria conta a pagar na mesma operação. A auditoria registra logins bem-sucedidos e chamadas autenticadas, sem registrar senhas ou tokens.
+
+Esta versão não integra gateway de pagamento, emissão fiscal, conciliação bancária, fechamento de caixa, WhatsApp/IA nem emissão de nota fiscal; não use os lançamentos como substituto de contabilidade ou transação bancária.
 
 ## Testes locais
 

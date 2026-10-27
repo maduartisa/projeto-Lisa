@@ -1,8 +1,20 @@
 # Interface web
 
-Aplicação Next.js/React em português para o catálogo público e a operação autenticada da empresa. O painel oferece visão geral, produtos, clientes, ajustes e histórico de estoque, criação de orçamentos e transições de pedidos. O catálogo público abre em `/catalog/{identificador-da-empresa}`.
+Aplicação Next.js/React em português para o catálogo público e a operação autenticada da empresa. O painel oferece produtos com tamanho/cor por SKU, clientes, fornecedores, funcionários e perfis, compras e recebimentos, estoque, financeiro, vendas no PDV por pedidos e auditoria de acessos. O catálogo abre em `/catalog/{identificador-da-empresa}` e envia pedidos para confirmação da equipe.
 
-## Requisitos
+## Teste rápido local
+
+Siga o modo de demonstração SQLite do [guia da aplicação](../README.md#teste-rápido-com-dados-fictícios) para iniciar a API sem PostgreSQL. Em seguida, inicie a interface:
+
+```powershell
+Set-Location .\application\web
+npm ci
+npm run dev
+```
+
+Abra `http://localhost:3000` e entre com os dados de demonstração documentados no guia. O WhatsApp abre uma conversa via `wa.me` para revisão e envio manual; disparos automáticos pela WhatsApp Business API exigem uma conta Meta e credenciais.
+
+## Requisitos de ambiente PostgreSQL
 
 - Node.js 20.9 ou superior.
 - API FastAPI e PostgreSQL preparados de acordo com o [guia da aplicação](../README.md).
@@ -29,4 +41,4 @@ npm run typecheck
 npm run build
 ```
 
-Os tokens de acesso ficam em `sessionStorage` do navegador e são removidos ao sair ou quando a API rejeita a sessão. A API valida o usuário, o vínculo, o tenant e as permissões em cada operação. Valores e disponibilidade exibidos no catálogo não substituem a confirmação da equipe; a seleção de produtos no catálogo é apenas informativa, pois não há checkout nem envio público de orçamento nesta entrega.
+Os tokens de acesso ficam em `sessionStorage` do navegador e são removidos ao sair ou quando a API rejeita a sessão. A API valida o usuário, o vínculo, o tenant e as permissões em cada operação. O checkout público cria apenas uma solicitação de pedido, sem cobrança; a loja confirma disponibilidade, entrega e pagamento. A venda no PDV também não captura pagamentos por cartão/Pix e depende da confirmação operacional da equipe.

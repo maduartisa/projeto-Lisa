@@ -46,6 +46,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   z-index: 20;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 27px 17px 18px;
   background: #fff;
   border-right: 1px solid #eeefea;
@@ -344,6 +346,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .status-in_transit { color: #725e99; background: #f0edfa; }
 .status-completed { color: #417655; background: #e8f3e9; }
 .status-cancelled { color: #a35450; background: #faecea; }
+.status-draft { color: #72649f; background: #f0edfa; }
+.status-received { color: #417655; background: #e8f3e9; }
 .row-open { width: 29px; height: 29px; }
 .data-table-compact td { padding-top: 10px; padding-bottom: 10px; }
 .table-scroll { width: 100%; overflow-x: auto; }
@@ -368,6 +372,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .product-meta span:first-child { color: #568063; font-weight: 600; }
 .product-card-body h3 { overflow: hidden; margin: 10px 0 5px; font-family: Manrope, sans-serif; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .product-description { min-height: 30px; overflow: hidden; margin: 0; color: #8a938c; font-size: 10px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.product-variant { margin: 5px 0; color: #587d61; font-size: 10px; font-weight: 600; }
 .product-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-top: 13px; padding-top: 11px; border-top: 1px solid #f0f1ed; }
 .product-card-footer > strong { font-family: Manrope, sans-serif; font-size: 15px; }
 .stock-label { display: inline-flex; align-items: center; gap: 5px; color: #63846b; font-size: 9px; }
@@ -396,6 +401,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .customer-tag { padding: 5px 7px; border-radius: 6px; color: #607766; background: #eff4ef; font-size: 9px; }
 .privacy-note { display: flex; align-items: center; gap: 8px; margin-top: 17px; color: #919a93; font-size: 10px; }
 .privacy-note-icon { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: #558466; background: #eaf4eb; }
+.table-actions { display: flex; align-items: center; gap: 4px; }
+.audit-action { display: inline-flex; align-items: center; gap: 7px; color: #5f6e63; }
+.audit-action svg { color: #76917b; }
+.compact-empty { min-height: 180px; }
 
 .empty-state { min-height: 270px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 18px; text-align: center; }
 .empty-state-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: #678a70; background: #edf4ed; }
@@ -580,6 +589,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .store-stock-in { color: #548060; }
 .store-stock-in > span { background: #7aaa7d; }
 .store-add { width: 29px; height: 29px; position: absolute; right: 10px; bottom: 10px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.84); border-radius: 9px; color: #fff; background: #467450; cursor: pointer; font-size: 20px; line-height: 1; box-shadow: 0 3px 8px rgba(30, 66, 42, .16); }
+.store-add:disabled { opacity: .48; cursor: not-allowed; }
 .store-add:hover { background: #2e603b; }
 .store-add-selected { color: #376746; background: #fff; }
 .store-add-selected:hover { background: #edf5ed; }
@@ -587,6 +597,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .store-product-labels { font-size: 8px; }
 .store-product-labels span:first-child { color: #5c8062; font-weight: 600; }
 .store-product-copy h3 { overflow: hidden; margin: 9px 0 5px; font-family: Manrope, sans-serif; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.store-variant { display: inline-flex; margin: 0 0 6px; padding: 4px 7px; border-radius: 6px; color: #53795e; background: #edf4ed; font-size: 8px; font-weight: 600; }
 .store-product-copy > p { min-height: 31px; overflow: hidden; margin: 0; color: #8b948d; font-size: 9px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .store-product-footer { display: flex; flex-direction: column; gap: 4px; margin-top: 11px; padding-top: 10px; border-top: 1px solid #eff1ed; }
 .store-product-footer strong { color: #354a39; font-family: Manrope, sans-serif; font-size: 15px; }
@@ -599,7 +610,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .store-selection-note { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 7px 15px; margin-top: 23px; padding: 14px 16px; border: 1px solid #dfebde; border-radius: 12px; background: #f2f7f0; }
 .store-selection-note > span { display: flex; align-items: center; gap: 7px; color: #446e4b; font-size: 11px; font-weight: 600; }
 .store-selection-note p { grid-column: 1; margin: 0; color: #819082; font-size: 9px; }
-.store-selection-note button { grid-column: 2; grid-row: 1 / span 2; border: 0; color: #738476; background: transparent; cursor: pointer; font-size: 9px; }
+.store-selection-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 10px; }
+.store-selection-actions > button:first-child { padding: 5px 0; border: 0; color: #738476; background: transparent; cursor: pointer; font-size: 9px; }
+.store-order-success { display: grid; gap: 6px; margin-top: 18px; padding: 16px; border: 1px solid #dce9dc; border-radius: 12px; color: #40674a; background: #f1f7f0; }
+.store-order-success strong { font-family: Manrope, sans-serif; font-size: 13px; }
+.store-order-success p, .store-order-success span { margin: 0; color: #758779; font-size: 10px; line-height: 1.5; }
+.checkout-items { display: grid; gap: 8px; padding: 11px 12px; border-radius: 10px; background: #f7f9f6; }
+.checkout-items > div { display: flex; justify-content: space-between; gap: 12px; color: #67736a; font-size: 10px; }
+.checkout-items strong { color: #35453a; white-space: nowrap; }
+.checkout-contact-hint, .checkout-disclaimer { margin: 0; color: #8a958c; font-size: 9px; line-height: 1.5; }
+.checkout-disclaimer { padding-top: 9px; border-top: 1px solid #edf0ea; }
 .store-footer { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px clamp(20px, 7vw, 100px); border-top: 1px solid #e9ede7; color: #99a19a; background: #fff; font-size: 9px; }
 .store-footer-brand { color: #586e5c; font-size: 10px; font-weight: 600; }
 .store-footer-brand .brand-mark { width: 25px; height: 25px; border-radius: 8px; }
@@ -760,11 +780,45 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .store-stock { top: 7px; left: 7px; padding: 4px 5px; font-size: 7px; }
   .store-add { width: 25px; height: 25px; right: 7px; bottom: 7px; }
   .store-selection-note { grid-template-columns: 1fr; }
-  .store-selection-note p, .store-selection-note button { grid-column: 1; grid-row: auto; }
-  .store-selection-note button { justify-self: start; padding: 4px 0; }
+  .store-selection-note p, .store-selection-actions { grid-column: 1; grid-row: auto; }
+  .store-selection-actions { flex-wrap: wrap; }
   .store-footer { align-items: flex-start; flex-direction: column; gap: 10px; padding: 18px 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+.whatsapp-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 18px; align-items: start; }
+.whatsapp-card, .whatsapp-guide { padding: 22px; }
+.whatsapp-card-heading { display: flex; align-items: center; gap: 13px; margin-bottom: 22px; }
+.whatsapp-card-heading h2, .whatsapp-guide h2 { margin: 0; font-size: 17px; letter-spacing: -.3px; }
+.whatsapp-card-heading p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.whatsapp-icon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 13px; background: #e8f4ed; color: #21865b; }
+.whatsapp-contact { display: flex; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; }
+.whatsapp-contact > span:last-child { display: grid; gap: 3px; }
+.whatsapp-contact strong { font-size: 12px; }
+.whatsapp-contact small, .whatsapp-latest small { color: var(--muted); font-size: 11px; }
+.whatsapp-preview { padding: 12px; border: 1px solid #dfece4; border-radius: 10px; background: #f7fbf8; }
+.whatsapp-preview > span { color: #5b806b; font-size: 9px; font-weight: 700; letter-spacing: .8px; }
+.whatsapp-preview p { margin: 8px 0 0; color: var(--ink); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.whatsapp-send { justify-content: center; min-height: 42px; }
+.whatsapp-hint { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--muted); font-size: 11px; }
+.whatsapp-card .checkout-disclaimer { margin-top: 16px; color: var(--muted); font-size: 10px; }
+.whatsapp-guide > .eyebrow { display: block; margin: 2px 0 10px; }
+.whatsapp-guide h2 { line-height: 1.4; }
+.whatsapp-guide ul { display: grid; gap: 10px; margin: 18px 0; padding-left: 18px; color: #66736b; font-size: 12px; line-height: 1.5; }
+.whatsapp-latest { display: grid; gap: 10px; margin: 18px 0; padding-top: 15px; border-top: 1px solid var(--line); }
+.whatsapp-latest > strong { font-size: 12px; }
+.whatsapp-latest > div { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+.whatsapp-latest > div span { min-width: 0; overflow-wrap: anywhere; }
+.whatsapp-latest b { white-space: nowrap; }
+.pos-origin { display: block; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: #f7f8f5; font-size: 13px; }
+.pos-disclaimer { margin: -4px 0 14px; padding: 10px 12px; border: 1px solid #e9ece6; border-radius: 9px; background: #fff; color: var(--muted); font-size: 11px; }
+
+@media (max-width: 860px) {
+  .whatsapp-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .whatsapp-card, .whatsapp-guide { padding: 16px; }
 }

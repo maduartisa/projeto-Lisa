@@ -37,8 +37,8 @@ Registrar a implementação local, sem implantação AWS, do projeto inicial de 
 
 - Nenhum comando de AWS foi executado; não houve `cdk bootstrap`, `cdk diff` contra conta ou `cdk deploy`.
 - Não foram criados serviços ECS Fargate, ALB, domínio, certificado, pipeline, escalabilidade, alarmes, scheduler ou políticas de custo.
-- Não há aplicação, Dockerfiles ou migrações de banco neste repositório.
-- A infraestrutura não cria tenants nem implementa o isolamento de dados `tenant_id`. Esse isolamento deve ser implementado e testado na aplicação e no esquema antes de uso multiempresa.
+- A aplicação e as migrações agora existem em `application/`, mas ainda não há Dockerfiles/imagens, serviços ECS Fargate, ALB nem configuração de runtime para publicá-las.
+- O CDK não cria tenants. A aplicação implementa autenticação e isolamento por `tenant_id`; esse isolamento ainda precisa ser exercitado contra a infraestrutura implantada.
 - Segredos específicos de WhatsApp/IA por tenant não são criados ou preenchidos nesta base.
 
 ## 5. Validação requerida
@@ -67,3 +67,10 @@ Validação local executada:
 ## 7. Gate
 
 **Fase aprovada pelo solicitante em 26/10/2026. A aprovação cobre a infraestrutura CDK local; deploy AWS continua dependendo de autorização operacional separada.**
+
+## 8. Preparação operacional local (27/10/2026)
+
+- O entry point agora resolve a conta e a região do perfil selecionado a partir de `CDK_DEFAULT_ACCOUNT` e `CDK_DEFAULT_REGION`, preservando os contextos CDK explícitos e o padrão `sa-east-1`.
+- `infrastructure/README.md` documenta autenticação AWS CLI por perfil/SSO, confirmação de identidade, revisão com `synth`/`diff`, bootstrap condicional e deploy explícito somente da stack de fundação `CommercialPlatform-dev`.
+- A aplicação ainda não pode receber tráfego via esta stack: faltam empacotamento Docker, serviços ECS, balanceador, endpoint TLS e configuração do usuário de aplicação no banco.
+- Nenhum perfil AWS foi configurado, nenhuma identidade foi consultada e nenhum bootstrap, diff contra conta ou deploy foi executado.

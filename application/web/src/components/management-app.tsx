@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ArrowUpRight,
   ArrowUpToLine,
+  Banknote,
   Box,
   Check,
   ChevronDown,
@@ -17,16 +18,21 @@ import {
   Command,
   Ellipsis,
   ExternalLink,
+  FileClock,
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageCircle,
   Package,
   Plus,
+  ReceiptText,
   RefreshCw,
   Settings2,
   ShoppingBag,
   Sparkles,
   Users,
+  UserRoundCog,
+  Truck,
   X,
 } from "lucide-react";
 import {
@@ -61,13 +67,17 @@ import {
   ToastProvider,
   useToast,
 } from "@/components/ui";
+import { OperationsModule, type OperationsView } from "@/components/operations-module";
+import { WhatsAppModule } from "@/components/whatsapp-module";
 
-type View = "overview" | "orders" | "products" | "inventory" | "customers";
+type View = "overview" | "pos" | "orders" | "products" | "inventory" | "customers" | "whatsapp" | OperationsView;
 type DataSet = { products: Product[]; customers: Customer[]; orders: Order[] };
 type ProductDraft = {
   sku: string;
   name: string;
   category: string;
+  size: string;
+  color: string;
   price: string;
   stock_quantity: string;
   description: string;
@@ -84,6 +94,7 @@ const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard; roles:
     icon: LayoutDashboard,
     roles: ["company_admin", "counter_operator", "inventory_manager", "human_support"],
   },
+  { id: "pos", label: "PDV / Vendas", icon: ShoppingBag, roles: ["company_admin", "counter_operator"] },
   { id: "orders", label: "Pedidos", icon: ClipboardList, roles: ["company_admin", "counter_operator"] },
   {
     id: "products",
@@ -103,12 +114,20 @@ const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard; roles:
     icon: Users,
     roles: ["company_admin", "counter_operator", "human_support"],
   },
+  { id: "suppliers", label: "Fornecedores", icon: Truck, roles: ["company_admin", "inventory_manager"] },
+  { id: "purchases", label: "Compras", icon: ReceiptText, roles: ["company_admin", "inventory_manager"] },
+  { id: "employees", label: "Funcionários", icon: UserRoundCog, roles: ["company_admin"] },
+  { id: "finance", label: "Financeiro", icon: Banknote, roles: ["company_admin"] },
+  { id: "whatsapp", label: "WhatsApp", icon: MessageCircle, roles: ["company_admin", "counter_operator"] },
+  { id: "access_logs", label: "Auditoria", icon: FileClock, roles: ["company_admin"] },
 ];
 
 const PRODUCT_BLANK: ProductDraft = {
   sku: "",
   name: "",
   category: "",
+  size: "",
+  color: "",
   price: "",
   stock_quantity: "0",
   description: "",
@@ -718,21 +737,24 @@ function OrdersPage({
   onSelect,
   onRefresh,
   loading,
+  mode = "orders",
 }: {
   data: DataSet;
   onCreate: () => void;
   onSelect: (order: Order) => void;
   onRefresh: () => void;
   loading: boolean;
+  mode?: "orders" | "pos";
 }) {
   const [filter, setFilter] = useState("all");
   const filtered = filter === "all" ? data.orders : data.orders.filter((order) => order.status === filter);
   return (
     <div className="page-content">
       <div className="page-title-row">
-        <div><p className="eyebrow">ORÇAMENTOS E PEDIDOS</p><h1>Central de pedidos</h1><p className="page-lead">Organize cada etapa, da cotação à conclusão.</p></div>
-        <Button onClick={onCreate}><Plus size={17} /> Novo pedido</Button>
+        <div><p className="eyebrow">{mode === "pos" ? "VENDA PRESENCIAL" : "ORÇAMENTOS E PEDIDOS"}</p><h1>{mode === "pos" ? "Ponto de venda" : "Central de pedidos"}</h1><p className="page-lead">{mode === "pos" ? "Registre uma venda de balcão e acompanhe estoque e conclusão." : "Organize cada etapa, da cotação à conclusão."}</p></div>
+        <Button onClick={onCreate}><Plus size={17} /> {mode === "pos" ? "Iniciar venda" : "Novo pedido"}</Button>
       </div>
+      {mode === "pos" ? <p className="checkout-disclaimer pos-disclaimer">O PDV cria um pedido para confirmação. Não há captura de pagamento integrada; o estoque é baixado ao concluir o pedido.</p> : null}
       <div className="toolbar">
         <div className="filter-tabs" role="tablist" aria-label="Filtrar pedidos">
           {[["all", "Todos"], ["quote", "Orçamentos"], ["pending", "Pendentes"], ["separating", "Em separação"], ["completed", "Concluídos"]].map(([value, label]) => (
@@ -766,6 +788,8 @@ function ProductForm({
           sku: initial.sku,
           name: initial.name,
           category: initial.category,
+          size: initial.size ?? "",
+          color: initial.color ?? "",
           price: initial.price,
           stock_quantity: initial.stock_quantity,
           description: initial.description ?? "",
@@ -806,9 +830,12 @@ function ProductForm({
         onSubmit={submit}
       >
         <div className="form-grid">
+          <p className="form-span page-lead">Cadastre cada combinação de tamanho e cor como uma variação com SKU e estoque próprios.</p>
           <Field label="SKU" maxLength={64} onChange={(event) => set("sku", event.target.value)} placeholder="Ex.: LIM-001" required value={draft.sku} />
           <Field label="Nome do produto" maxLength={160} onChange={(event) => set("name", event.target.value)} placeholder="Nome comercial" required value={draft.name} />
           <Field label="Categoria" maxLength={100} onChange={(event) => set("category", event.target.value)} placeholder="Ex.: Limpeza" required value={draft.category} />
+          <Field label="Tamanho / medida" maxLength={64} onChange={(event) => set("size", event.target.value)} placeholder="Ex.: P, M, G ou 500 ml" value={draft.size} />
+          <Field label="Cor" maxLength={64} onChange={(event) => set("color", event.target.value)} placeholder="Ex.: Azul" value={draft.color} />
           <Field label="Preço (R$)" min="0" onChange={(event) => set("price", event.target.value)} placeholder="0,00" required step="0.01" type="number" value={draft.price} />
           {!initial ? <Field label="Saldo inicial" min="0" onChange={(event) => set("stock_quantity", event.target.value)} step="0.001" type="number" value={draft.stock_quantity} /> : null}
           <Field label="Imagem (URL)" maxLength={2048} onChange={(event) => set("image_url", event.target.value)} placeholder="https://..." type="url" value={draft.image_url} />
@@ -876,6 +903,7 @@ function ProductsPage({
               <div className="product-card-body">
                 <div className="product-meta"><span>{product.category}</span><span>SKU {product.sku}</span></div>
                 <h3>{product.name}</h3>
+                {product.size || product.color ? <p className="product-variant">{[product.size, product.color].filter(Boolean).join(" · ")}</p> : null}
                 <p className="product-description">{product.description || "Sem descrição cadastrada."}</p>
                 <div className="product-card-footer">
                   <strong>{formatCurrency(product.price)}</strong>
@@ -1004,6 +1032,7 @@ function InventoryHistory({
     initial: "Saldo inicial",
     adjustment: "Ajuste",
     sale: "Pedido concluído",
+    purchase: "Compra recebida",
   };
 
   return (
@@ -1180,9 +1209,11 @@ function OrderForm({
   data,
   onClose,
   onSave,
+  posOnly = false,
 }: {
   data: DataSet;
   onClose: () => void;
+  posOnly?: boolean;
   onSave: (draft: {
     customer_id: string;
     source: string;
@@ -1226,16 +1257,18 @@ function OrderForm({
   }
 
   return (
-    <Modal description="O sistema consulta os preços e confirma o total no momento da cotação." onClose={onClose} title="Novo pedido" wide>
+    <Modal description={posOnly ? "Crie um pedido de balcão. O pagamento deve ser confirmado fora do sistema e o estoque é baixado ao concluir o pedido." : "O sistema consulta os preços e confirma o total no momento da cotação."} onClose={onClose} title={posOnly ? "Iniciar venda no PDV" : "Novo pedido"} wide>
       {data.customers.length && activeProducts.length ? (
-        <FormShell footer={<><Button onClick={onClose} variant="ghost">Cancelar</Button><Button loading={busy} type="submit">Criar orçamento · {formatCurrency(estimate)}</Button></>} onSubmit={submit}>
+        <FormShell footer={<><Button onClick={onClose} variant="ghost">Cancelar</Button><Button loading={busy} type="submit">{posOnly ? "Criar pedido" : "Criar orçamento"} · {formatCurrency(estimate)}</Button></>} onSubmit={submit}>
           <div className="form-grid">
             <SelectField label="Cliente" onChange={(event) => setCustomerId(event.target.value)} required value={customerId}>
               <option disabled value="">Selecione um cliente</option>{data.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ""}</option>)}
             </SelectField>
-            <SelectField label="Origem do pedido" onChange={(event) => setSource(event.target.value)} value={source}>
-              <option value="counter">Balcão</option><option value="catalog">Catálogo digital</option><option value="whatsapp">WhatsApp</option>
-            </SelectField>
+            {posOnly ? <div className="field"><span>Origem do pedido</span><strong className="pos-origin">Balcão</strong></div> : (
+              <SelectField label="Origem do pedido" onChange={(event) => setSource(event.target.value)} value={source}>
+                <option value="counter">Balcão</option><option value="catalog">Catálogo digital</option><option value="whatsapp">WhatsApp</option>
+              </SelectField>
+            )}
             <SelectField className="form-span" label="Atendimento" onChange={(event) => setFulfillment(event.target.value)} value={fulfillment}>
               <option value="counter">Venda presencial</option><option value="pickup">Retirada na loja</option><option value="delivery">Entrega local</option>
             </SelectField>
@@ -1463,6 +1496,8 @@ function ManagementAppContent() {
       sku: draft.sku.trim(),
       name: draft.name.trim(),
       category: draft.category.trim(),
+      size: draft.size.trim() || null,
+      color: draft.color.trim() || null,
       price: draft.price,
       ...(editing ? {} : { stock_quantity: draft.stock_quantity }),
       description: draft.description.trim() || null,
@@ -1538,10 +1573,17 @@ function ManagementAppContent() {
 
   const pageInfo: Record<View, { title: string; subtitle: string }> = {
     overview: { title: "Visão geral", subtitle: "Uma visão tranquila do que acontece na sua empresa." },
+    pos: { title: "PDV / Vendas", subtitle: "Registre vendas de balcão e acompanhe a conclusão de cada pedido." },
     orders: { title: "Pedidos", subtitle: "Cotações, atendimento e andamento da operação." },
     products: { title: "Produtos", subtitle: "Organize o catálogo e as informações comerciais." },
     inventory: { title: "Estoque", subtitle: "Saldos e movimentações da empresa." },
     customers: { title: "Clientes", subtitle: "Contatos cadastrados para o atendimento." },
+    suppliers: { title: "Fornecedores", subtitle: "Contatos e parceiros da sua operação." },
+    purchases: { title: "Compras", subtitle: "Entradas e recebimentos de mercadorias." },
+    employees: { title: "Funcionários", subtitle: "Contas da equipe e permissões de acesso." },
+    finance: { title: "Financeiro", subtitle: "Contas a pagar e receber." },
+    whatsapp: { title: "WhatsApp", subtitle: "Atendimento conectado aos clientes, pedidos e catálogo." },
+    access_logs: { title: "Auditoria de acesso", subtitle: "Histórico de atividades autenticadas." },
   };
 
   return (
@@ -1582,6 +1624,24 @@ function ManagementAppContent() {
             onSelect={setSelectedOrder}
           />
         ) : null}
+        {view === "pos" ? (
+          <OrdersPage
+            data={data}
+            loading={loading}
+            onCreate={() => setOrderModal(true)}
+            onRefresh={() => void refreshCurrent()}
+            onSelect={setSelectedOrder}
+            mode="pos"
+          />
+        ) : null}
+        {view === "whatsapp" ? (
+          <WhatsAppModule
+            customers={data.customers}
+            orders={data.orders}
+            products={data.products}
+            tenantSlug={session.tenant.slug}
+          />
+        ) : null}
         {view === "products" ? (
           <ProductsPage
             canEdit={permissions!.editProducts}
@@ -1606,13 +1666,22 @@ function ManagementAppContent() {
             onRefresh={() => void refreshCurrent()}
           />
         ) : null}
+        {["suppliers", "purchases", "employees", "finance", "access_logs"].includes(view) ? (
+          <OperationsModule
+            key={view}
+            onRefresh={refreshCurrent}
+            products={data.products}
+            token={token}
+            view={view as OperationsView}
+          />
+        ) : null}
       </main>
 
       {productModal ? <ProductForm initial={productModal === "new" ? undefined : productModal} onClose={() => setProductModal(null)} onSave={saveProduct} /> : null}
       {customerModal ? <CustomerForm onClose={() => setCustomerModal(false)} onSave={saveCustomer} /> : null}
       {inventoryProduct ? <InventoryForm onClose={() => setInventoryProduct(null)} onSave={saveInventory} product={inventoryProduct} /> : null}
       {historyProduct && token ? <InventoryHistory onClose={() => setHistoryProduct(null)} product={historyProduct} token={token} /> : null}
-      {orderModal ? <OrderForm data={data} onClose={() => setOrderModal(false)} onSave={saveOrder} /> : null}
+      {orderModal ? <OrderForm data={data} onClose={() => setOrderModal(false)} onSave={saveOrder} posOnly={view === "pos"} /> : null}
       {selectedOrder ? <OrderDetail customer={data.customers.find((item) => item.id === selectedOrder.customer_id)} onClose={() => setSelectedOrder(null)} onTransition={transitionOrder} order={selectedOrder} products={data.products} /> : null}
     </div>
   );

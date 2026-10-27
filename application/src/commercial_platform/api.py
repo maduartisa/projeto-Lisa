@@ -1,10 +1,11 @@
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated
 from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,7 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from commercial_platform.config import Settings
 from commercial_platform.database import session_dependency
 from commercial_platform.models import (
+    AccessLog,
     Customer,
+    FinancialEntry,
     FulfillmentMethod,
     InventoryMovement,
     InventoryMovementType,
@@ -22,27 +25,43 @@ from commercial_platform.models import (
     OrderItem,
     OrderSource,
     OrderStatus,
+    Purchase,
+    PurchaseItem,
     Product,
+    Supplier,
     Tenant,
     TenantMembership,
     TenantStatus,
     User,
 )
 from commercial_platform.schemas import (
+    AccessLogResponse,
     CurrentUserResponse,
     CustomerCreate,
     CustomerResponse,
+    EmployeeCreate,
+    EmployeeResponse,
+    EmployeeUpdate,
+    FinancialEntryCreate,
+    FinancialEntryResponse,
     InventoryAdjustment,
     InventoryMovementResponse,
     LoginRequest,
     OrderCreate,
     OrderResponse,
     OrderStatusUpdate,
+    PublicOrderCreate,
+    PublicOrderReceipt,
+    PurchaseCreate,
+    PurchaseResponse,
+    PurchaseStatusUpdate,
     ProductCreate,
     ProductResponse,
     ProductUpdate,
     PublicProductResponse,
     PublicTenantResponse,
+    SupplierCreate,
+    SupplierResponse,
     TenantSlug,
     TokenResponse,
 )
@@ -51,6 +70,7 @@ from commercial_platform.security import (
     decode_access_token,
     issue_access_token,
     membership_is_active,
+    hash_password,
     token_ids,
     verify_password,
 )
@@ -88,6 +108,7 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
     router = APIRouter(prefix="/api/v1")
 
     def current_context(
+        request: Request,
         credentials: Annotated[
             HTTPAuthorizationCredentials | None,
             Depends(bearer_scheme),
@@ -129,6 +150,14 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
                 detail="Token inválido ou expirado.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        session.add(
+            AccessLog(
+                tenant_id=membership.tenant_id,
+                user_id=membership.user_id,
+                action=f"{request.method} {request.url.path}",
+            )
+        )
+        session.commit()
         return AuthContext(
             user=membership.user,
             tenant=membership.tenant,
@@ -217,6 +246,14 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Credenciais inválidas.",
             )
+        session.add(
+            AccessLog(
+                tenant_id=membership.tenant_id,
+                user_id=user.id,
+                action="POST /api/v1/auth/token (login)",
+            )
+        )
+        session.commit()
         token, lifetime = issue_access_token(user, membership, settings)
         return TokenResponse(access_token=token, expires_in=lifetime)
 
@@ -307,6 +344,8 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
                 "sku": product.sku,
                 "name": product.name,
                 "category": product.category,
+                "size": product.size,
+                "color": product.color,
                 "description": product.description,
                 "price": product.price,
                 "in_stock": product.stock_quantity > 0,
@@ -314,6 +353,91 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             }
             for product in products
         ]
+
+    @router.post(
+        "/public/{tenant_slug}/orders",
+        response_model=PublicOrderReceipt,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_public_order(
+        tenant_slug: TenantSlug,
+        payload: PublicOrderCreate,
+        session: Annotated[Session, Depends(get_session)],
+    ) -> dict:
+        tenant = session.scalar(
+            select(Tenant).where(
+                Tenant.slug == tenant_slug,
+                Tenant.status == TenantStatus.ACTIVE,
+            )
+        )
+        if tenant is None:
+            raise HTTPException(status_code=404, detail="Catálogo não encontrado.")
+        requested = sorted(payload.items, key=lambda item: item.product_id)
+        products = list(
+            session.scalars(
+                select(Product)
+                .where(
+                    Product.tenant_id == tenant.id,
+                    Product.id.in_([item.product_id for item in requested]),
+                    Product.is_active.is_(True),
+                )
+                .order_by(Product.id)
+                .with_for_update()
+            ).all()
+        )
+        if len(products) != len(requested):
+            raise HTTPException(
+                status_code=422,
+                detail="Um ou mais produtos não existem ou estão indisponíveis.",
+            )
+        product_by_id = {product.id: product for product in products}
+        total = Decimal("0.00")
+        order_items = []
+        for requested_item in requested:
+            product = product_by_id[requested_item.product_id]
+            if product.stock_quantity < requested_item.quantity:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Estoque insuficiente para o produto {product.sku}.",
+                )
+            line_total = (product.price * requested_item.quantity).quantize(
+                CENT, rounding=ROUND_HALF_UP
+            )
+            total += line_total
+            if total > MAX_ORDER_TOTAL:
+                raise HTTPException(
+                    status_code=422,
+                    detail="O total do pedido excede o limite suportado.",
+                )
+            order_items.append(
+                OrderItem(
+                    tenant_id=tenant.id,
+                    product_id=product.id,
+                    quantity=requested_item.quantity,
+                    unit_price=product.price,
+                    line_total=line_total,
+                )
+            )
+        customer = Customer(
+            tenant_id=tenant.id,
+            name=payload.customer_name,
+            phone=payload.phone,
+            email=str(payload.email).lower() if payload.email else None,
+        )
+        session.add(customer)
+        session.flush()
+        order = Order(
+            tenant_id=tenant.id,
+            customer_id=customer.id,
+            status=OrderStatus.PENDING,
+            source=OrderSource.CATALOG,
+            fulfillment_method=payload.fulfillment_method,
+            total=total,
+            items=order_items,
+        )
+        session.add(order)
+        session.commit()
+        return {"order_id": order.id, "status": order.status, "total": order.total}
 
     @router.get("/admin/products", response_model=list[ProductResponse])
     def list_products(
@@ -370,6 +494,8 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             sku=payload.sku,
             name=payload.name.strip(),
             category=payload.category.strip(),
+            size=payload.size,
+            color=payload.color,
             description=payload.description,
             price=payload.price,
             stock_quantity=payload.stock_quantity,
@@ -729,6 +855,422 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
         order.status = payload.status
         session.commit()
         return order
+
+    @router.get("/admin/employees", response_model=list[EmployeeResponse])
+    def list_employees(
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> list[dict]:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        memberships = session.scalars(
+            select(TenantMembership)
+            .where(TenantMembership.tenant_id == context.tenant.id)
+            .order_by(TenantMembership.created_at, TenantMembership.id)
+        ).all()
+        return [
+            {
+                "id": membership.id,
+                "user_id": membership.user_id,
+                "email": membership.user.email,
+                "display_name": membership.display_name,
+                "role": membership.role,
+                "is_active": membership.is_active and membership.user.is_active,
+                "created_at": membership.created_at,
+            }
+            for membership in memberships
+        ]
+
+    @router.post(
+        "/admin/employees",
+        response_model=EmployeeResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_employee(
+        payload: EmployeeCreate,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> dict:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        email = str(payload.email).lower()
+        if session.scalar(select(User.id).where(User.email == email)):
+            raise HTTPException(
+                status_code=409,
+                detail="Este e-mail já possui uma conta. Use outro endereço.",
+            )
+        user = User(email=email, password_hash=hash_password(payload.password))
+        membership = TenantMembership(
+            tenant_id=context.tenant.id,
+            user=user,
+            display_name=payload.display_name,
+            role=payload.role,
+            is_active=True,
+        )
+        session.add(membership)
+        session.commit()
+        return {
+            "id": membership.id,
+            "user_id": user.id,
+            "email": user.email,
+            "display_name": membership.display_name,
+            "role": membership.role,
+            "is_active": membership.is_active,
+            "created_at": membership.created_at,
+        }
+
+    @router.patch("/admin/employees/{membership_id}", response_model=EmployeeResponse)
+    def update_employee(
+        membership_id: UUID,
+        payload: EmployeeUpdate,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> dict:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        membership = session.scalar(
+            select(TenantMembership)
+            .where(
+                TenantMembership.id == membership_id,
+                TenantMembership.tenant_id == context.tenant.id,
+            )
+            .with_for_update()
+        )
+        if membership is None:
+            raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
+        updates = payload.model_dump(exclude_unset=True)
+        next_role = updates.get("role", membership.role)
+        next_active = updates.get("is_active", membership.is_active)
+        if membership.user_id == context.user.id and next_active is False:
+            raise HTTPException(
+                status_code=409,
+                detail="Não é possível desativar o próprio acesso.",
+            )
+        if (
+            membership.role == MembershipRole.COMPANY_ADMIN
+            and membership.is_active
+            and (
+                next_role != MembershipRole.COMPANY_ADMIN
+                or not next_active
+            )
+        ):
+            other_admin = session.scalar(
+                select(TenantMembership.id)
+                .join(User)
+                .where(
+                    TenantMembership.tenant_id == context.tenant.id,
+                    TenantMembership.id != membership.id,
+                    TenantMembership.role == MembershipRole.COMPANY_ADMIN,
+                    TenantMembership.is_active.is_(True),
+                    User.is_active.is_(True),
+                )
+                .limit(1)
+            )
+            if other_admin is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A empresa precisa manter ao menos uma administradora ativa.",
+                )
+        for field, value in updates.items():
+            setattr(membership, field, value)
+        session.commit()
+        return {
+            "id": membership.id,
+            "user_id": membership.user_id,
+            "email": membership.user.email,
+            "display_name": membership.display_name,
+            "role": membership.role,
+            "is_active": membership.is_active and membership.user.is_active,
+            "created_at": membership.created_at,
+        }
+
+    @router.get("/admin/suppliers", response_model=list[SupplierResponse])
+    def list_suppliers(
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+        q: str | None = Query(default=None, max_length=160),
+        limit: int = Query(default=100, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> list[Supplier]:
+        require_role(context, MembershipRole.COMPANY_ADMIN, MembershipRole.INVENTORY_MANAGER)
+        query = select(Supplier).where(Supplier.tenant_id == context.tenant.id)
+        if q:
+            query = query.where(Supplier.name.ilike(f"%{q}%"))
+        return list(
+            session.scalars(
+                query.order_by(Supplier.name, Supplier.id).limit(limit).offset(offset)
+            ).all()
+        )
+
+    @router.post(
+        "/admin/suppliers",
+        response_model=SupplierResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_supplier(
+        payload: SupplierCreate,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> Supplier:
+        require_role(context, MembershipRole.COMPANY_ADMIN, MembershipRole.INVENTORY_MANAGER)
+        supplier = Supplier(
+            tenant_id=context.tenant.id,
+            name=payload.name,
+            document=payload.document,
+            contact_name=payload.contact_name,
+            phone=payload.phone,
+            email=str(payload.email).lower() if payload.email else None,
+        )
+        session.add(supplier)
+        session.commit()
+        return supplier
+
+    @router.get("/admin/purchases", response_model=list[PurchaseResponse])
+    def list_purchases(
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+        limit: int = Query(default=100, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> list[Purchase]:
+        require_role(context, MembershipRole.COMPANY_ADMIN, MembershipRole.INVENTORY_MANAGER)
+        return list(
+            session.scalars(
+                select(Purchase)
+                .where(Purchase.tenant_id == context.tenant.id)
+                .order_by(Purchase.created_at.desc(), Purchase.id)
+                .limit(limit)
+                .offset(offset)
+            ).all()
+        )
+
+    @router.post(
+        "/admin/purchases",
+        response_model=PurchaseResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_purchase(
+        payload: PurchaseCreate,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> Purchase:
+        require_role(context, MembershipRole.COMPANY_ADMIN, MembershipRole.INVENTORY_MANAGER)
+        supplier = session.scalar(
+            select(Supplier).where(
+                Supplier.id == payload.supplier_id,
+                Supplier.tenant_id == context.tenant.id,
+            )
+        )
+        if supplier is None:
+            raise HTTPException(status_code=404, detail="Fornecedor não encontrado.")
+        requested = sorted(payload.items, key=lambda item: item.product_id)
+        products = list(
+            session.scalars(
+                select(Product)
+                .where(
+                    Product.tenant_id == context.tenant.id,
+                    Product.id.in_([item.product_id for item in requested]),
+                )
+                .order_by(Product.id)
+                .with_for_update()
+            ).all()
+        )
+        if len(products) != len(requested):
+            raise HTTPException(
+                status_code=422,
+                detail="Um ou mais produtos não existem nesta empresa.",
+            )
+        total = Decimal("0.00")
+        purchase_items = []
+        for item in requested:
+            line_total = (item.quantity * item.unit_cost).quantize(
+                CENT, rounding=ROUND_HALF_UP
+            )
+            total += line_total
+            if total > MAX_ORDER_TOTAL:
+                raise HTTPException(
+                    status_code=422,
+                    detail="O valor da compra excede o limite suportado.",
+                )
+            purchase_items.append(
+                PurchaseItem(
+                    tenant_id=context.tenant.id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    unit_cost=item.unit_cost,
+                    line_total=line_total,
+                )
+            )
+        purchase = Purchase(
+            tenant_id=context.tenant.id,
+            supplier_id=supplier.id,
+            status="draft",
+            total=total,
+            items=purchase_items,
+        )
+        session.add(purchase)
+        session.commit()
+        return purchase
+
+    @router.patch(
+        "/admin/purchases/{purchase_id}/status",
+        response_model=PurchaseResponse,
+    )
+    def update_purchase_status(
+        purchase_id: UUID,
+        payload: PurchaseStatusUpdate,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> Purchase:
+        require_role(context, MembershipRole.COMPANY_ADMIN, MembershipRole.INVENTORY_MANAGER)
+        purchase = session.scalar(
+            select(Purchase)
+            .where(
+                Purchase.id == purchase_id,
+                Purchase.tenant_id == context.tenant.id,
+            )
+            .with_for_update()
+        )
+        if purchase is None:
+            raise HTTPException(status_code=404, detail="Compra não encontrada.")
+        if purchase.status != "draft":
+            raise HTTPException(
+                status_code=409,
+                detail="Somente compras em rascunho podem ser recebidas ou canceladas.",
+            )
+        if payload.status == "received":
+            items = sorted(purchase.items, key=lambda item: item.product_id)
+            products = [
+                get_tenant_product(
+                    session, context.tenant.id, item.product_id, lock=True
+                )
+                for item in items
+            ]
+            for item, product in zip(items, products, strict=True):
+                product.stock_quantity += item.quantity
+                session.add(
+                    InventoryMovement(
+                        tenant_id=context.tenant.id,
+                        product_id=product.id,
+                        quantity_delta=item.quantity,
+                        movement_type=InventoryMovementType.PURCHASE,
+                        reference_id=purchase.id,
+                        note="Entrada de estoque pela recepção de compra.",
+                    )
+                )
+            supplier = session.scalar(
+                select(Supplier).where(
+                    Supplier.id == purchase.supplier_id,
+                    Supplier.tenant_id == context.tenant.id,
+                )
+            )
+            if supplier is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="O fornecedor associado à compra não está disponível.",
+                )
+            session.add(
+                FinancialEntry(
+                    tenant_id=context.tenant.id,
+                    entry_type="payable",
+                    description=f"Compra recebida - {supplier.name}",
+                    amount=purchase.total,
+                    due_date=date.today(),
+                    status="pending",
+                )
+            )
+        purchase.status = payload.status
+        session.commit()
+        return purchase
+
+    @router.get("/admin/finance", response_model=list[FinancialEntryResponse])
+    def list_financial_entries(
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+        entry_status: str | None = Query(default=None, alias="status", pattern="^(pending|settled|cancelled)$"),
+        limit: int = Query(default=100, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> list[FinancialEntry]:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        query = select(FinancialEntry).where(
+            FinancialEntry.tenant_id == context.tenant.id
+        )
+        if entry_status:
+            query = query.where(FinancialEntry.status == entry_status)
+        return list(
+            session.scalars(
+                query.order_by(FinancialEntry.due_date, FinancialEntry.id)
+                .limit(limit)
+                .offset(offset)
+            ).all()
+        )
+
+    @router.post(
+        "/admin/finance",
+        response_model=FinancialEntryResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_financial_entry(
+        payload: FinancialEntryCreate,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> FinancialEntry:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        entry = FinancialEntry(
+            tenant_id=context.tenant.id,
+            entry_type=payload.entry_type,
+            description=payload.description,
+            amount=payload.amount,
+            due_date=payload.due_date,
+            status="pending",
+        )
+        session.add(entry)
+        session.commit()
+        return entry
+
+    @router.patch(
+        "/admin/finance/{entry_id}/settle",
+        response_model=FinancialEntryResponse,
+    )
+    def settle_financial_entry(
+        entry_id: UUID,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> FinancialEntry:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        entry = session.scalar(
+            select(FinancialEntry)
+            .where(
+                FinancialEntry.id == entry_id,
+                FinancialEntry.tenant_id == context.tenant.id,
+            )
+            .with_for_update()
+        )
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Lançamento não encontrado.")
+        if entry.status != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="Somente lançamentos pendentes podem ser baixados.",
+            )
+        entry.status = "settled"
+        entry.settled_at = datetime.now(timezone.utc)
+        session.commit()
+        return entry
+
+    @router.get("/admin/access-logs", response_model=list[AccessLogResponse])
+    def list_access_logs(
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+        limit: int = Query(default=100, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> list[AccessLog]:
+        require_role(context, MembershipRole.COMPANY_ADMIN)
+        return list(
+            session.scalars(
+                select(AccessLog)
+                .where(AccessLog.tenant_id == context.tenant.id)
+                .order_by(AccessLog.created_at.desc(), AccessLog.id)
+                .limit(limit)
+                .offset(offset)
+            ).all()
+        )
 
     app.include_router(router)
     return app
