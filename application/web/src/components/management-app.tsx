@@ -215,8 +215,8 @@ function LoginScreen({
       <section className="login-panel">
         <div className="login-form-wrap">
           <div className="brand-lockup login-brand">
-            <span className="brand-mark"><Command size={20} strokeWidth={2.2} /></span>
-            <span>comercial<span className="brand-dot">.</span></span>
+            <span className="brand-mark brand-mark-initials">MJ</span>
+            <span className="brand-name">MJ<small>COMERCIAL E TECNOLOGIA</small></span>
           </div>
           <p className="eyebrow">ACESSO DA EQUIPE</p>
           <h2>Que bom ter você<br />por aqui.</h2>
@@ -287,8 +287,8 @@ function Sidebar({
       {open ? <button className="mobile-sidebar-backdrop" onClick={onClose} aria-label="Fechar menu" /> : null}
       <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
-          <span className="brand-mark"><Command size={21} strokeWidth={2.2} /></span>
-          <span className="brand-name">comercial<span className="brand-dot">.</span></span>
+          <span className="brand-mark brand-mark-initials">MJ</span>
+          <span className="brand-name">MJ<small>COMERCIAL E TECNOLOGIA</small></span>
         </div>
         <div className="workspace-switcher">
           <div className="workspace-avatar">{session.tenant.display_name.trim().charAt(0).toUpperCase()}</div>

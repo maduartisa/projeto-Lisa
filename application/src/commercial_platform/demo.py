@@ -47,7 +47,7 @@ def main() -> None:
         if tenant is None:
             tenant = Tenant(
                 slug="demo",
-                display_name="Lisa Comercial — Demonstração",
+                display_name="MJ Comercial e Tecnologia",
                 status="active",
             )
             user = User(
@@ -120,6 +120,7 @@ def main() -> None:
                 ]
             )
         else:
+            tenant.display_name = "MJ Comercial e Tecnologia"
             user = session.scalar(select(User).where(User.email == DEMO_EMAIL))
             if user is None:
                 raise RuntimeError("The local demo tenant exists without its demo administrator.")

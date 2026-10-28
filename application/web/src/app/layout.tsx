@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Comercial — Gestão da sua loja",
+  title: "MJ Comercial e Tecnologia",
   description:
-    "Catálogo, estoque, clientes e pedidos em um único espaço de gestão.",
+    "Gestão comercial, catálogo, estoque, vendas e atendimento da MJ Comercial e Tecnologia.",
 };
 
 export default function RootLayout({

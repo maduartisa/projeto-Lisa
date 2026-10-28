@@ -8,6 +8,10 @@
   --green: #245b47;
   --green-dark: #193f32;
   --green-soft: #e8f1eb;
+  --brand-violet: #6558e8;
+  --brand-blue: #3285e8;
+  --brand-pink: #e052a0;
+  --brand-orange: #ed8c32;
   --mint: #e8f4ed;
   --peach: #fff0e8;
   --sand: #f7f0df;
@@ -68,7 +72,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   justify-content: center;
   border-radius: 11px;
   color: #fff;
-  background: var(--green);
+  background: linear-gradient(135deg, var(--brand-violet), var(--brand-blue));
+}
+
+.brand-mark-initials {
+  font-family: Manrope, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -.3px;
 }
 
 .brand-name, .brand-lockup > span:last-child {
@@ -78,6 +89,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   letter-spacing: -.8px;
 }
 
+.brand-name { display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
+.brand-name small { color: #78817b; font-family: "DM Sans", sans-serif; font-size: 8px; font-weight: 700; letter-spacing: .65px; }
 .brand-dot { color: #8eba93; }
 
 .workspace-switcher {
@@ -132,10 +145,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   text-align: left;
   transition: color .18s ease, background .18s ease;
 }
-.nav-item:hover { color: var(--green); background: #f6f8f5; }
-.nav-item-active { color: var(--green-dark); background: #edf4ee; font-weight: 600; }
-.nav-item-active svg { color: var(--green); }
-.nav-pulse { width: 7px; height: 7px; margin-left: auto; border-radius: 99px; background: #9cbe9d; }
+.nav-item:hover { color: var(--brand-violet); background: #f4f2ff; }
+.nav-item-active { color: #fff; background: linear-gradient(110deg, var(--brand-violet), var(--brand-blue)); box-shadow: 0 5px 13px rgba(101, 88, 232, .2); font-weight: 600; }
+.nav-item-active svg { color: #fff; }
+.nav-pulse { width: 7px; height: 7px; margin-left: auto; border-radius: 99px; background: var(--brand-orange); }
 .sidebar-spacer { flex: 1; }
 .sidebar-card { position: relative; overflow: hidden; margin: 12px 0 19px; padding: 14px; border: 1px solid #e8eee8; border-radius: 14px; background: #f6f9f5; }
 .sidebar-card-icon { width: 29px; height: 29px; display: grid; place-items: center; margin-bottom: 12px; border-radius: 9px; color: #37714f; background: #e5efe5; }
