@@ -29,6 +29,81 @@ def create_customer(client: TestClient, auth: dict[str, str]) -> UUID:
     return UUID(response.json()["id"])
 
 
+def test_customer_document_address_and_postal_code_are_saved_and_searchable(
+    client: TestClient,
+) -> None:
+    admin = headers(client)
+    response = client.post(
+        "/api/v1/admin/customers",
+        headers=admin,
+        json={
+            "name": "Cliente completo",
+            "document": "529.982.247-25",
+            "address": "  Rua das Flores, 123  ",
+            "postal_code": "01001-000",
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["document"] == "52998224725"
+    assert response.json()["address"] == "Rua das Flores, 123"
+    assert response.json()["postal_code"] == "01001000"
+
+    searched = client.get(
+        "/api/v1/admin/customers?q=52998224725", headers=admin
+    )
+    assert [customer["id"] for customer in searched.json()] == [response.json()["id"]]
+
+    invalid_document = client.post(
+        "/api/v1/admin/customers",
+        headers=admin,
+        json={"name": "Documento inválido", "document": "123"},
+    )
+    assert invalid_document.status_code == 422
+
+
+def test_product_cost_and_tax_rates_are_saved_and_validated(
+    client: TestClient,
+) -> None:
+    admin = headers(client)
+    response = client.post(
+        "/api/v1/admin/products",
+        headers=admin,
+        json={
+            "sku": "FISCAL-1",
+            "name": "Produto fiscal",
+            "category": "Geral",
+            "price": "25.90",
+            "cost_price": "12.40",
+            "icms_rate": "18.00",
+            "ipi_rate": "5.00",
+            "pis_rate": "1.65",
+            "cofins_rate": "7.60",
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["cost_price"] == "12.40"
+    assert response.json()["icms_rate"] == "18.00"
+    assert response.json()["ipi_rate"] == "5.00"
+    assert response.json()["pis_rate"] == "1.65"
+    assert response.json()["cofins_rate"] == "7.60"
+
+    updated = client.patch(
+        f"/api/v1/admin/products/{response.json()['id']}",
+        headers=admin,
+        json={"cost_price": "14.00", "cofins_rate": "8.00"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["cost_price"] == "14.00"
+    assert updated.json()["cofins_rate"] == "8.00"
+
+    invalid_rate = client.patch(
+        f"/api/v1/admin/products/{response.json()['id']}",
+        headers=admin,
+        json={"icms_rate": "100.01"},
+    )
+    assert invalid_rate.status_code == 422
+
+
 def create_product(
     client: TestClient,
     auth: dict[str, str],

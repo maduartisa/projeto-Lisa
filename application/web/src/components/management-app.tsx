@@ -79,6 +79,11 @@ type ProductDraft = {
   size: string;
   color: string;
   price: string;
+  cost_price: string;
+  icms_rate: string;
+  ipi_rate: string;
+  pis_rate: string;
+  cofins_rate: string;
   stock_quantity: string;
   description: string;
   image_url: string;
@@ -129,6 +134,11 @@ const PRODUCT_BLANK: ProductDraft = {
   size: "",
   color: "",
   price: "",
+  cost_price: "0.00",
+  icms_rate: "0.00",
+  ipi_rate: "0.00",
+  pis_rate: "0.00",
+  cofins_rate: "0.00",
   stock_quantity: "0",
   description: "",
   image_url: "",
@@ -291,10 +301,10 @@ function Sidebar({
           <span className="brand-name">MJ<small>COMERCIAL E TECNOLOGIA</small></span>
         </div>
         <div className="workspace-switcher">
-          <div className="workspace-avatar">{session.tenant.display_name.trim().charAt(0).toUpperCase()}</div>
+          <div className="workspace-avatar">L</div>
           <div className="workspace-copy">
             <span>Seu espaço</span>
-            <strong title={session.tenant.display_name}>{session.tenant.display_name}</strong>
+            <strong title="Lisa Comercial">Lisa Comercial</strong>
           </div>
           <ChevronDown size={16} />
         </div>
@@ -791,6 +801,11 @@ function ProductForm({
           size: initial.size ?? "",
           color: initial.color ?? "",
           price: initial.price,
+          cost_price: initial.cost_price ?? "0.00",
+          icms_rate: initial.icms_rate ?? "0.00",
+          ipi_rate: initial.ipi_rate ?? "0.00",
+          pis_rate: initial.pis_rate ?? "0.00",
+          cofins_rate: initial.cofins_rate ?? "0.00",
           stock_quantity: initial.stock_quantity,
           description: initial.description ?? "",
           image_url: initial.image_url ?? "",
@@ -830,13 +845,18 @@ function ProductForm({
         onSubmit={submit}
       >
         <div className="form-grid">
-          <p className="form-span page-lead">Cadastre cada combinação de tamanho e cor como uma variação com SKU e estoque próprios.</p>
+          <p className="form-span page-lead">Cadastre cada combinação de tamanho e cor como uma variação com SKU e estoque próprios. As alíquotas são informativas e não geram cálculo automático de tributos.</p>
           <Field label="SKU" maxLength={64} onChange={(event) => set("sku", event.target.value)} placeholder="Ex.: LIM-001" required value={draft.sku} />
           <Field label="Nome do produto" maxLength={160} onChange={(event) => set("name", event.target.value)} placeholder="Nome comercial" required value={draft.name} />
           <Field label="Categoria" maxLength={100} onChange={(event) => set("category", event.target.value)} placeholder="Ex.: Limpeza" required value={draft.category} />
           <Field label="Tamanho / medida" maxLength={64} onChange={(event) => set("size", event.target.value)} placeholder="Ex.: P, M, G ou 500 ml" value={draft.size} />
           <Field label="Cor" maxLength={64} onChange={(event) => set("color", event.target.value)} placeholder="Ex.: Azul" value={draft.color} />
           <Field label="Preço (R$)" min="0" onChange={(event) => set("price", event.target.value)} placeholder="0,00" required step="0.01" type="number" value={draft.price} />
+          <Field label="Preço de custo (R$)" min="0" onChange={(event) => set("cost_price", event.target.value)} placeholder="0,00" required step="0.01" type="number" value={draft.cost_price} />
+          <Field label="ICMS (%)" min="0" max="100" onChange={(event) => set("icms_rate", event.target.value)} required step="0.01" type="number" value={draft.icms_rate} />
+          <Field label="IPI (%)" min="0" max="100" onChange={(event) => set("ipi_rate", event.target.value)} required step="0.01" type="number" value={draft.ipi_rate} />
+          <Field label="PIS (%)" min="0" max="100" onChange={(event) => set("pis_rate", event.target.value)} required step="0.01" type="number" value={draft.pis_rate} />
+          <Field label="COFINS (%)" min="0" max="100" onChange={(event) => set("cofins_rate", event.target.value)} required step="0.01" type="number" value={draft.cofins_rate} />
           {!initial ? <Field label="Saldo inicial" min="0" onChange={(event) => set("stock_quantity", event.target.value)} step="0.001" type="number" value={draft.stock_quantity} /> : null}
           <Field label="Imagem (URL)" maxLength={2048} onChange={(event) => set("image_url", event.target.value)} placeholder="https://..." type="url" value={draft.image_url} />
           <TextAreaField className="form-span" label="Descrição" maxLength={2000} onChange={(event) => set("description", event.target.value)} placeholder="Detalhes importantes para a equipe e o catálogo..." rows={3} value={draft.description} />
@@ -1086,28 +1106,30 @@ function CustomersPage({
 }) {
   const [search, setSearch] = useState("");
   const visible = customers.filter((customer) =>
-    `${customer.name} ${customer.email ?? ""} ${customer.phone ?? ""}`.toLowerCase().includes(search.toLowerCase()),
+    `${customer.name} ${customer.document ?? ""} ${customer.email ?? ""} ${customer.phone ?? ""} ${customer.address ?? ""} ${customer.postal_code ?? ""}`.toLowerCase().includes(search.toLowerCase()),
   );
   return (
     <div className="page-content">
       <div className="page-title-row">
-        <div><p className="eyebrow">RELACIONAMENTO</p><h1>Clientes</h1><p className="page-lead">Informações de contato para atender cada pessoa.</p></div>
+        <div><p className="eyebrow">RELACIONAMENTO</p><h1>Clientes</h1><p className="page-lead">Dados de contato, identificação e endereço para atender cada pessoa.</p></div>
         <Button onClick={onCreate}><Plus size={17} /> Novo cliente</Button>
       </div>
-      <div className="toolbar"><SearchBox onChange={setSearch} placeholder="Buscar nome, e-mail ou telefone" value={search} /><button aria-label="Atualizar clientes" className="icon-button refresh-button" onClick={onRefresh} title="Atualizar" type="button"><RefreshCw size={17} /></button></div>
+      <div className="toolbar">      <SearchBox onChange={setSearch} placeholder="Buscar nome, CPF/CNPJ, e-mail ou telefone" value={search} /><button aria-label="Atualizar clientes" className="icon-button refresh-button" onClick={onRefresh} title="Atualizar" type="button"><RefreshCw size={17} /></button></div>
       <section className="surface-card list-card">
         <div className="list-card-heading"><div><h2>Base de clientes</h2><p>{visible.length} cadastros vinculados a esta empresa</p></div></div>
         {visible.length ? (
           <div className="table-scroll">
             <table className="data-table">
-              <thead><tr><th>Cliente</th><th>Telefone</th><th>E-mail</th><th>Cadastro</th><th /></tr></thead>
+              <thead><tr><th>Cliente</th><th>CPF/CNPJ</th><th>Telefone</th><th>E-mail</th><th>Endereço</th><th>CEP</th><th>Cadastro</th></tr></thead>
               <tbody>{visible.map((customer) => (
                 <tr key={customer.id}>
                   <td><span className="table-customer"><span className="customer-avatar">{customer.name.charAt(0).toUpperCase()}</span><strong className="table-primary">{customer.name}</strong></span></td>
+                  <td className="table-muted">{customer.document || "—"}</td>
                   <td className="table-muted">{customer.phone || "—"}</td>
                   <td className="table-muted">{customer.email || "—"}</td>
+                  <td className="table-muted">{customer.address || "—"}</td>
+                  <td className="table-muted">{customer.postal_code || "—"}</td>
                   <td className="table-muted">{formatDate(customer.created_at)}</td>
-                  <td><span className="customer-tag">Cliente</span></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -1124,11 +1146,14 @@ function CustomerForm({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (draft: { name: string; phone: string; email: string }) => Promise<void>;
+  onSave: (draft: { name: string; phone: string; email: string; document: string; address: string; postal_code: string }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [document, setDocument] = useState("");
+  const [address, setAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -1137,7 +1162,7 @@ function CustomerForm({
     setError("");
     setBusy(true);
     try {
-      await onSave({ name, phone, email });
+      await onSave({ name, phone, email, document, address, postal_code: postalCode });
       onClose();
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Não foi possível salvar o cliente.");
@@ -1153,6 +1178,9 @@ function CustomerForm({
           <Field autoComplete="name" label="Nome completo" maxLength={160} onChange={(event) => setName(event.target.value)} placeholder="Nome da pessoa" required value={name} />
           <Field autoComplete="tel" label="Telefone / WhatsApp" maxLength={32} onChange={(event) => setPhone(event.target.value)} placeholder="+55 (11) 99999-9999" type="tel" value={phone} />
           <Field autoComplete="email" label="E-mail" maxLength={320} onChange={(event) => setEmail(event.target.value)} placeholder="cliente@email.com" type="email" value={email} />
+          <Field autoComplete="off" label="CPF/CNPJ" maxLength={18} onChange={(event) => setDocument(event.target.value)} placeholder="000.000.000-00 ou 00.000.000/0000-00" value={document} />
+          <Field autoComplete="street-address" label="Endereço" maxLength={500} onChange={(event) => setAddress(event.target.value)} placeholder="Rua, número, complemento, bairro e cidade/UF" value={address} />
+          <Field autoComplete="postal-code" label="CEP" maxLength={10} onChange={(event) => setPostalCode(event.target.value)} placeholder="00000-000" value={postalCode} />
         </div>
         <FormError>{error}</FormError>
       </FormShell>
@@ -1499,6 +1527,11 @@ function ManagementAppContent() {
       size: draft.size.trim() || null,
       color: draft.color.trim() || null,
       price: draft.price,
+      cost_price: draft.cost_price,
+      icms_rate: draft.icms_rate,
+      ipi_rate: draft.ipi_rate,
+      pis_rate: draft.pis_rate,
+      cofins_rate: draft.cofins_rate,
       ...(editing ? {} : { stock_quantity: draft.stock_quantity }),
       description: draft.description.trim() || null,
       image_url: draft.image_url.trim() || null,
@@ -1514,7 +1547,7 @@ function ManagementAppContent() {
     if (result.id) setProductModal(null);
   }
 
-  async function saveCustomer(draft: { name: string; phone: string; email: string }) {
+  async function saveCustomer(draft: { name: string; phone: string; email: string; document: string; address: string; postal_code: string }) {
     if (!token) throw new Error("Sua sessão expirou.");
     await api<Customer>("/api/v1/admin/customers", token, {
       method: "POST",
@@ -1522,6 +1555,9 @@ function ManagementAppContent() {
         name: draft.name.trim(),
         phone: draft.phone.trim() || null,
         email: draft.email.trim() || null,
+        document: draft.document.trim() || null,
+        address: draft.address.trim() || null,
+        postal_code: draft.postal_code.trim() || null,
       }),
     });
     await refreshCurrent();

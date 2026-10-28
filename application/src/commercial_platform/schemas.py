@@ -77,6 +77,45 @@ class ProductCreate(BaseModel):
     price: Decimal = Field(
         ge=0, max_digits=12, decimal_places=2, allow_inf_nan=False
     )
+    cost_price: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        max_digits=12,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    icms_rate: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    ipi_rate: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    pis_rate: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    cofins_rate: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
     stock_quantity: Decimal = Field(
         default=Decimal("0"),
         ge=0,
@@ -117,6 +156,45 @@ class ProductUpdate(BaseModel):
         decimal_places=2,
         allow_inf_nan=False,
     )
+    cost_price: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=12,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    icms_rate: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    ipi_rate: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    pis_rate: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
+    cofins_rate: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        max_digits=5,
+        decimal_places=2,
+        allow_inf_nan=False,
+    )
     image_url: HttpUrl | None = Field(default=None, max_length=2048)
     is_active: bool | None = None
 
@@ -139,7 +217,18 @@ class ProductUpdate(BaseModel):
 
     @model_validator(mode="after")
     def reject_null_required_fields(self):
-        for field in ("sku", "name", "category", "price", "is_active"):
+        for field in (
+            "sku",
+            "name",
+            "category",
+            "price",
+            "cost_price",
+            "icms_rate",
+            "ipi_rate",
+            "pis_rate",
+            "cofins_rate",
+            "is_active",
+        ):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} não pode ser nulo.")
         return self
@@ -156,6 +245,11 @@ class ProductResponse(BaseModel):
     color: str | None
     description: str | None
     price: Decimal
+    cost_price: Decimal | None
+    icms_rate: Decimal | None
+    ipi_rate: Decimal | None
+    pis_rate: Decimal | None
+    cofins_rate: Decimal | None
     stock_quantity: Decimal
     image_url: str | None
     is_active: bool
@@ -184,6 +278,9 @@ class CustomerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     phone: str | None = Field(default=None, min_length=1, max_length=32)
     email: EmailStr | None = None
+    document: str | None = Field(default=None, max_length=18)
+    address: str | None = Field(default=None, max_length=500)
+    postal_code: str | None = Field(default=None, max_length=10)
 
     @field_validator("name")
     @classmethod
@@ -193,6 +290,45 @@ class CustomerCreate(BaseModel):
             raise ValueError("O nome não pode ficar vazio.")
         return value
 
+    @field_validator("document", mode="before")
+    @classmethod
+    def normalize_document(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip():
+            return None
+        if any(not character.isdigit() and character not in " .-/" for character in value):
+            raise ValueError("O CPF/CNPJ deve conter apenas números e separadores.")
+        digits = "".join(character for character in value if character.isdigit())
+        if not digits:
+            raise ValueError("Informe um CPF com 11 dígitos ou um CNPJ com 14 dígitos.")
+        if len(digits) not in {11, 14}:
+            raise ValueError("Informe um CPF com 11 dígitos ou um CNPJ com 14 dígitos.")
+        return digits
+
+    @field_validator("postal_code", mode="before")
+    @classmethod
+    def normalize_postal_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip():
+            return None
+        if any(not character.isdigit() and character not in " -" for character in value):
+            raise ValueError("O CEP deve conter apenas números e hífen.")
+        digits = "".join(character for character in value if character.isdigit())
+        if not digits:
+            raise ValueError("O CEP deve conter 8 dígitos.")
+        if len(digits) != 8:
+            raise ValueError("O CEP deve conter 8 dígitos.")
+        return digits
+
+    @field_validator("address")
+    @classmethod
+    def normalize_address(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
 
 class CustomerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -201,6 +337,9 @@ class CustomerResponse(BaseModel):
     name: str
     phone: str | None
     email: EmailStr | None
+    document: str | None
+    address: str | None
+    postal_code: str | None
     created_at: datetime
 
 

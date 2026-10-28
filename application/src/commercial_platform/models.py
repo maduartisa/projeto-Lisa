@@ -125,6 +125,19 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         CheckConstraint("price >= 0", name="ck_products_price_nonnegative"),
+        CheckConstraint("cost_price >= 0", name="ck_products_cost_price_nonnegative"),
+        CheckConstraint(
+            "icms_rate BETWEEN 0 AND 100", name="ck_products_icms_rate_range"
+        ),
+        CheckConstraint(
+            "ipi_rate BETWEEN 0 AND 100", name="ck_products_ipi_rate_range"
+        ),
+        CheckConstraint(
+            "pis_rate BETWEEN 0 AND 100", name="ck_products_pis_rate_range"
+        ),
+        CheckConstraint(
+            "cofins_rate BETWEEN 0 AND 100", name="ck_products_cofins_rate_range"
+        ),
         CheckConstraint("stock_quantity >= 0", name="ck_products_stock_nonnegative"),
         UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
         UniqueConstraint("tenant_id", "id", name="uq_products_tenant_id"),
@@ -142,6 +155,21 @@ class Product(Base):
     color: Mapped[str | None] = mapped_column(String(64))
     description: Mapped[str | None] = mapped_column(String(2000))
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    cost_price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0.00")
+    )
+    icms_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0.00")
+    )
+    ipi_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0.00")
+    )
+    pis_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0.00")
+    )
+    cofins_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0.00")
+    )
     stock_quantity: Mapped[Decimal] = mapped_column(
         Numeric(14, 3), nullable=False, default=Decimal("0")
     )
@@ -164,6 +192,9 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(32))
     email: Mapped[str | None] = mapped_column(String(320))
+    document: Mapped[str | None] = mapped_column(String(14))
+    address: Mapped[str | None] = mapped_column(String(500))
+    postal_code: Mapped[str | None] = mapped_column(String(8))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

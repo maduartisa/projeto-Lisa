@@ -2,7 +2,8 @@ import secrets
 from pathlib import Path
 
 import uvicorn
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
+from sqlalchemy.engine import Engine
 
 from commercial_platform.api import create_app
 from commercial_platform.config import Settings
@@ -23,6 +24,38 @@ from commercial_platform.security import hash_password
 DEMO_EMAIL = "admin@demo.example"
 
 
+def upgrade_demo_schema(engine: Engine) -> None:
+    product_columns = {
+        column["name"] for column in inspect(engine).get_columns("products")
+    }
+    customer_columns = {
+        column["name"] for column in inspect(engine).get_columns("customers")
+    }
+    product_fields = {
+        "cost_price": "NUMERIC(12, 2) NOT NULL DEFAULT 0",
+        "icms_rate": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+        "ipi_rate": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+        "pis_rate": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+        "cofins_rate": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
+    }
+    customer_fields = {
+        "document": "VARCHAR(14)",
+        "address": "VARCHAR(500)",
+        "postal_code": "VARCHAR(8)",
+    }
+    with engine.begin() as connection:
+        for field, column_type in product_fields.items():
+            if field not in product_columns:
+                connection.execute(
+                    text(f"ALTER TABLE products ADD COLUMN {field} {column_type}")
+                )
+        for field, column_type in customer_fields.items():
+            if field not in customer_columns:
+                connection.execute(
+                    text(f"ALTER TABLE customers ADD COLUMN {field} {column_type}")
+                )
+
+
 def main() -> None:
     data_directory = Path(__file__).resolve().parents[2] / ".local"
     data_directory.mkdir(parents=True, exist_ok=True)
@@ -40,7 +73,9 @@ def main() -> None:
         jwt_secret_key=secrets.token_urlsafe(48),
     )
     sessions = create_session_factory(settings)
-    Base.metadata.create_all(sessions.kw["bind"])
+    engine = sessions.kw["bind"]
+    Base.metadata.create_all(engine)
+    upgrade_demo_schema(engine)
 
     with sessions.begin() as session:
         tenant = session.scalar(select(Tenant).where(Tenant.slug == "demo"))

@@ -447,7 +447,7 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
         category: str | None = Query(default=None, max_length=100),
         limit: int = Query(default=100, ge=1, le=200),
         offset: int = Query(default=0, ge=0),
-    ) -> list[Product]:
+    ) -> list[dict]:
         require_role(
             context,
             MembershipRole.COMPANY_ADMIN,
@@ -461,11 +461,32 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             )
         if category:
             query = query.where(Product.category == category)
-        return list(
+        products = list(
             session.scalars(
                 query.order_by(Product.name, Product.id).limit(limit).offset(offset)
             ).all()
         )
+        include_cost = context.membership.role in {
+            MembershipRole.COMPANY_ADMIN,
+            MembershipRole.INVENTORY_MANAGER,
+        }
+        return [
+            {
+                **ProductResponse.model_validate(product).model_dump(),
+                **(
+                    {}
+                    if include_cost
+                    else {
+                        "cost_price": None,
+                        "icms_rate": None,
+                        "ipi_rate": None,
+                        "pis_rate": None,
+                        "cofins_rate": None,
+                    }
+                ),
+            }
+            for product in products
+        ]
 
     @router.post(
         "/admin/products",
@@ -498,6 +519,11 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             color=payload.color,
             description=payload.description,
             price=payload.price,
+            cost_price=payload.cost_price,
+            icms_rate=payload.icms_rate,
+            ipi_rate=payload.ipi_rate,
+            pis_rate=payload.pis_rate,
+            cofins_rate=payload.cofins_rate,
             stock_quantity=payload.stock_quantity,
             image_url=str(payload.image_url) if payload.image_url else None,
             is_active=payload.is_active,
@@ -645,7 +671,12 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
         )
         query = select(Customer).where(Customer.tenant_id == context.tenant.id)
         if q:
-            query = query.where(Customer.name.ilike(f"%{q}%"))
+            query = query.where(
+                Customer.name.ilike(f"%{q}%")
+                | Customer.phone.ilike(f"%{q}%")
+                | Customer.email.ilike(f"%{q}%")
+                | Customer.document.ilike(f"%{q}%")
+            )
         return list(
             session.scalars(
                 query.order_by(Customer.name, Customer.id).limit(limit).offset(offset)
@@ -673,6 +704,9 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             name=payload.name.strip(),
             phone=payload.phone,
             email=str(payload.email).lower() if payload.email else None,
+            document=payload.document,
+            address=payload.address,
+            postal_code=payload.postal_code,
         )
         session.add(customer)
         session.commit()

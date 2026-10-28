@@ -148,6 +148,56 @@ def test_employee_routes_are_admin_only(client):
     assert client.get("/api/v1/admin/employees", headers=operator).status_code == 403
 
 
+def test_counter_operator_does_not_receive_product_cost_or_tax_rates(client):
+    admin = headers(login(client, "empresa-a"))
+    product = client.post(
+        "/api/v1/admin/products",
+        headers=admin,
+        json={
+            "sku": "PRIVATE-COST",
+            "name": "Produto com custo interno",
+            "category": "Geral",
+            "price": "30.00",
+            "cost_price": "10.00",
+            "icms_rate": "18.00",
+        },
+    )
+    assert product.status_code == 201
+    created = client.post(
+        "/api/v1/admin/employees",
+        headers=admin,
+        json={
+            "display_name": "Operador",
+            "email": "operador-custo@empresa-a.example",
+            "password": "a-secure-test-password",
+            "role": MembershipRole.COUNTER_OPERATOR.value,
+        },
+    )
+    assert created.status_code == 201
+    operator_token = client.post(
+        "/api/v1/auth/token",
+        json={
+            "email": "operador-custo@empresa-a.example",
+            "password": "a-secure-test-password",
+            "tenant_slug": "empresa-a",
+        },
+    )
+    assert operator_token.status_code == 200
+    products = client.get(
+        "/api/v1/admin/products",
+        headers=headers(operator_token.json()["access_token"]),
+    )
+    assert products.status_code == 200
+    hidden = next(
+        item for item in products.json() if item["id"] == product.json()["id"]
+    )
+    assert hidden["cost_price"] is None
+    assert hidden["icms_rate"] is None
+    assert hidden["ipi_rate"] is None
+    assert hidden["pis_rate"] is None
+    assert hidden["cofins_rate"] is None
+
+
 def test_public_checkout_creates_pending_catalog_order_without_charging(client):
     admin = headers(login(client, "empresa-a"))
     product = create_product(client, admin)

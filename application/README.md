@@ -1,6 +1,6 @@
 # Aplicação — automação comercial
 
-A aplicação reúne API FastAPI e interface web responsiva para catálogo, operação de balcão e administração multiempresa. Inclui cadastro de clientes, fornecedores e funcionários; produtos com grade de tamanho/cor por SKU; compras, estoque, pedidos, contas a pagar/receber e auditoria de acessos. O checkout online apenas envia pedido para confirmação e não processa pagamentos.
+A aplicação reúne API FastAPI e interface web responsiva para catálogo, operação de balcão e administração multiempresa. Inclui cadastro de clientes com CPF/CNPJ e endereço; produtos com grade de tamanho/cor por SKU, preço de custo e alíquotas informativas de ICMS, IPI, PIS e COFINS; fornecedores, funcionários, compras, estoque, pedidos, contas a pagar/receber e auditoria de acessos. As alíquotas não calculam tributos automaticamente e devem ser confirmadas com a contabilidade. O checkout online apenas envia pedido para confirmação e não processa pagamentos.
 
 ## Teste rápido com dados fictícios
 
