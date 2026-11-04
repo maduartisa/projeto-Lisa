@@ -40,6 +40,22 @@ class LoginRequest(BaseModel):
     tenant_slug: TenantSlug
 
 
+class TenantRegistrationRequest(BaseModel):
+    company_name: str = Field(min_length=1, max_length=160)
+    tenant_slug: TenantSlug
+    admin_name: str = Field(min_length=1, max_length=160)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("company_name", "admin_name")
+    @classmethod
+    def names_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("O campo não pode ficar vazio.")
+        return value
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -69,6 +85,9 @@ class CurrentUserResponse(BaseModel):
 
 class ProductCreate(BaseModel):
     sku: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    barcode: str | None = Field(default=None, max_length=32, pattern=r"^\d{1,32}$")
+    ncm: str | None = Field(default=None, max_length=8, pattern=r"^\d{8}$")
+    cst: str | None = Field(default=None, max_length=3, pattern=r"^\d{2,3}$")
     name: str = Field(min_length=1, max_length=160)
     category: str = Field(min_length=1, max_length=100)
     size: str | None = Field(default=None, max_length=64)
@@ -141,9 +160,19 @@ class ProductCreate(BaseModel):
             return None
         return value.strip() or None
 
+    @field_validator("barcode", "ncm", "cst", mode="before")
+    @classmethod
+    def normalize_fiscal_identifiers(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
 
 class ProductUpdate(BaseModel):
     sku: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    barcode: str | None = Field(default=None, max_length=32, pattern=r"^\d{1,32}$")
+    ncm: str | None = Field(default=None, max_length=8, pattern=r"^\d{8}$")
+    cst: str | None = Field(default=None, max_length=3, pattern=r"^\d{2,3}$")
     name: str | None = Field(default=None, min_length=1, max_length=160)
     category: str | None = Field(default=None, min_length=1, max_length=100)
     size: str | None = Field(default=None, max_length=64)
@@ -215,6 +244,13 @@ class ProductUpdate(BaseModel):
             return None
         return value.strip() or None
 
+    @field_validator("barcode", "ncm", "cst", mode="before")
+    @classmethod
+    def normalize_fiscal_identifiers(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
     @model_validator(mode="after")
     def reject_null_required_fields(self):
         for field in (
@@ -239,6 +275,9 @@ class ProductResponse(BaseModel):
 
     id: UUID
     sku: str
+    barcode: str | None
+    ncm: str | None
+    cst: str | None
     name: str
     category: str
     size: str | None

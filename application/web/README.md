@@ -12,7 +12,7 @@ npm ci
 npm run dev
 ```
 
-Abra `http://localhost:3000` e entre com os dados de demonstração documentados no guia. O WhatsApp abre uma conversa via `wa.me` para revisão e envio manual; disparos automáticos pela WhatsApp Business API exigem uma conta Meta e credenciais.
+Abra `http://localhost:3000` e entre com os dados de demonstração documentados no guia, ou selecione **Cadastre sua empresa** para registrar uma empresa e criar o primeiro acesso de administradora. O WhatsApp abre uma conversa via `wa.me` para revisão e envio manual; disparos automáticos pela WhatsApp Business API exigem uma conta Meta e credenciais.
 
 ## Requisitos de ambiente PostgreSQL
 

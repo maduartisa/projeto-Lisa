@@ -74,6 +74,9 @@ type View = "overview" | "pos" | "orders" | "products" | "inventory" | "customer
 type DataSet = { products: Product[]; customers: Customer[]; orders: Order[] };
 type ProductDraft = {
   sku: string;
+  barcode: string;
+  ncm: string;
+  cst: string;
   name: string;
   category: string;
   size: string;
@@ -129,6 +132,9 @@ const NAV_ITEMS: { id: View; label: string; icon: typeof LayoutDashboard; roles:
 
 const PRODUCT_BLANK: ProductDraft = {
   sku: "",
+  barcode: "",
+  ncm: "",
+  cst: "",
   name: "",
   category: "",
   size: "",
@@ -170,29 +176,57 @@ function LoginScreen({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  async function completeLogin(token: string) {
+    const context = await api<Omit<Session, "access_token">>(
+      "/api/v1/auth/me",
+      token,
+    );
+    onLogin(token, { ...context, access_token: token });
+    toast("success", `Boas-vindas à ${context.tenant.display_name}.`);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setBusy(true);
     try {
-      const issued = await api<{ access_token: string }>("/api/v1/auth/token", undefined, {
-        method: "POST",
-        body: JSON.stringify({ email, password, tenant_slug: tenantSlug }),
-      });
-      const context = await api<Omit<Session, "access_token">>(
-        "/api/v1/auth/me",
-        issued.access_token,
+      if (registering && password !== confirmPassword) {
+        setError("As senhas não conferem.");
+        return;
+      }
+      const issued = await api<{ access_token: string }>(
+        registering ? "/api/v1/auth/register" : "/api/v1/auth/token",
+        undefined,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            registering
+              ? {
+                  company_name: companyName,
+                  tenant_slug: tenantSlug,
+                  admin_name: adminName,
+                  email,
+                  password,
+                }
+              : { email, password, tenant_slug: tenantSlug },
+          ),
+        },
       );
-      onLogin(issued.access_token, { ...context, access_token: issued.access_token });
-      toast("success", `Boas-vindas à ${context.tenant.display_name}.`);
+      await completeLogin(issued.access_token);
     } catch (issue) {
       setError(
         issue instanceof Error
           ? issue.message
-          : "Não foi possível iniciar sua sessão.",
+          : registering
+            ? "Não foi possível cadastrar a empresa."
+            : "Não foi possível iniciar sua sessão.",
       );
     } finally {
       setBusy(false);
@@ -228,10 +262,28 @@ function LoginScreen({
             <span className="brand-mark brand-mark-initials">MJ</span>
             <span className="brand-name">MJ<small>COMERCIAL E TECNOLOGIA</small></span>
           </div>
-          <p className="eyebrow">ACESSO DA EQUIPE</p>
-          <h2>Que bom ter você<br />por aqui.</h2>
-          <p className="login-subtitle">Entre para cuidar da sua operação.</p>
+          <p className="eyebrow">{registering ? "NOVO CADASTRO" : "ACESSO DA EQUIPE"}</p>
+          <h2>{registering ? <>Cadastre sua<br />empresa.</> : <>Que bom ter você<br />por aqui.</>}</h2>
+          <p className="login-subtitle">
+            {registering ? "Crie a empresa e o primeiro acesso administrativo." : "Entre para cuidar da sua operação."}
+          </p>
           <form className="login-form" onSubmit={submit}>
+            {registering ? (
+              <>
+                <Field autoComplete="organization" label="Nome da empresa" onChange={(event) => setCompanyName(event.target.value)} required value={companyName} />
+                <Field
+                  autoComplete="organization"
+                  label="Identificador da empresa"
+                  onChange={(event) => setTenantSlug(event.target.value.toLowerCase().trim().replace(/\s+/g, "-"))}
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                  placeholder="ex: minha-empresa"
+                  required
+                  title="Use letras minúsculas, números e hífens."
+                  value={tenantSlug}
+                />
+                <Field autoComplete="name" label="Nome da pessoa administradora" onChange={(event) => setAdminName(event.target.value)} required value={adminName} />
+              </>
+            ) : null}
             <Field
               autoComplete="email"
               label="E-mail"
@@ -241,34 +293,58 @@ function LoginScreen({
               type="email"
               value={email}
             />
+            {!registering ? (
+              <Field
+                autoComplete="organization"
+                label="Identificador da empresa"
+                onChange={(event) => setTenantSlug(event.target.value.toLowerCase().replace(/\s/g, "-"))}
+                placeholder="ex: minha-empresa"
+                required
+                value={tenantSlug}
+              />
+            ) : null}
             <Field
-              autoComplete="current-password"
+              autoComplete={registering ? "new-password" : "current-password"}
+              hint={registering ? "Use pelo menos 12 caracteres." : undefined}
               label="Senha"
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Sua senha"
               required
               type="password"
               value={password}
+              minLength={registering ? 12 : undefined}
             />
-            <Field
-              autoComplete="organization"
-              label="Identificador da empresa"
-              onChange={(event) =>
-                setTenantSlug(event.target.value.toLowerCase().replace(/\s/g, "-"))
-              }
-              placeholder="ex: minha-empresa"
-              required
-              value={tenantSlug}
-            />
+            {registering ? (
+              <Field
+                autoComplete="new-password"
+                label="Confirmar senha"
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+                type="password"
+                value={confirmPassword}
+              />
+            ) : null}
             <FormError>{error}</FormError>
             <Button className="login-submit" loading={busy} type="submit">
-              Entrar no painel <ArrowUpRight size={17} />
+              {registering ? "Cadastrar empresa e entrar" : "Entrar no painel"} <ArrowUpRight size={17} />
             </Button>
           </form>
-          <p className="login-help">
-            <CircleHelp size={15} />
-            Precisa de acesso? Fale com a pessoa administradora da sua empresa.
-          </p>
+          <button
+            className="login-mode-toggle"
+            onClick={() => {
+              setRegistering((current) => !current);
+              setError("");
+            }}
+            type="button"
+          >
+            {registering ? "Já tem uma empresa cadastrada? Entrar" : "Ainda não tem cadastro? Cadastre sua empresa"}
+          </button>
+          {!registering ? (
+            <p className="login-help">
+              <CircleHelp size={15} />
+              Precisa de acesso? Fale com a pessoa administradora da sua empresa.
+            </p>
+          ) : null}
           <p className="login-legal">Acesso protegido • Seus dados pertencem à sua empresa</p>
         </div>
       </section>
@@ -301,10 +377,10 @@ function Sidebar({
           <span className="brand-name">MJ<small>COMERCIAL E TECNOLOGIA</small></span>
         </div>
         <div className="workspace-switcher">
-          <div className="workspace-avatar">L</div>
+          <div className="workspace-avatar">{session.tenant.display_name.trim().charAt(0).toUpperCase() || "E"}</div>
           <div className="workspace-copy">
             <span>Seu espaço</span>
-            <strong title="Lisa Comercial">Lisa Comercial</strong>
+            <strong title={session.tenant.display_name}>{session.tenant.display_name}</strong>
           </div>
           <ChevronDown size={16} />
         </div>
@@ -796,6 +872,9 @@ function ProductForm({
     initial
       ? {
           sku: initial.sku,
+          barcode: initial.barcode ?? "",
+          ncm: initial.ncm ?? "",
+          cst: initial.cst ?? "",
           name: initial.name,
           category: initial.category,
           size: initial.size ?? "",
@@ -845,8 +924,11 @@ function ProductForm({
         onSubmit={submit}
       >
         <div className="form-grid">
-          <p className="form-span page-lead">Cadastre cada combinação de tamanho e cor como uma variação com SKU e estoque próprios. As alíquotas são informativas e não geram cálculo automático de tributos.</p>
+          <p className="form-span page-lead">Cadastre cada combinação de tamanho e cor como uma variação com SKU e estoque próprios. As alíquotas de ICMS, IPI, PIS e COFINS são informativas, editáveis para referência da empresa no DF e não calculam tributos automaticamente; confirme-as com a contabilidade.</p>
           <Field label="SKU" maxLength={64} onChange={(event) => set("sku", event.target.value)} placeholder="Ex.: LIM-001" required value={draft.sku} />
+          <Field autoComplete="off" inputMode="numeric" label="Código de barras (GTIN)" maxLength={32} onChange={(event) => set("barcode", event.target.value.replace(/\D/g, ""))} pattern="[0-9]{1,32}" placeholder="Somente números" value={draft.barcode} />
+          <Field autoComplete="off" inputMode="numeric" label="NCM" maxLength={8} onChange={(event) => set("ncm", event.target.value.replace(/\D/g, "").slice(0, 8))} pattern="[0-9]{8}" placeholder="8 dígitos" value={draft.ncm} />
+          <Field autoComplete="off" inputMode="numeric" label="CST / CSOSN" maxLength={3} onChange={(event) => set("cst", event.target.value.replace(/\D/g, "").slice(0, 3))} pattern="[0-9]{2,3}" placeholder="2 ou 3 dígitos" value={draft.cst} />
           <Field label="Nome do produto" maxLength={160} onChange={(event) => set("name", event.target.value)} placeholder="Nome comercial" required value={draft.name} />
           <Field label="Categoria" maxLength={100} onChange={(event) => set("category", event.target.value)} placeholder="Ex.: Limpeza" required value={draft.category} />
           <Field label="Tamanho / medida" maxLength={64} onChange={(event) => set("size", event.target.value)} placeholder="Ex.: P, M, G ou 500 ml" value={draft.size} />
@@ -1522,6 +1604,9 @@ function ManagementAppContent() {
     const editing = productModal && productModal !== "new" ? productModal : null;
     const body = {
       sku: draft.sku.trim(),
+      barcode: draft.barcode.trim() || null,
+      ncm: draft.ncm.trim() || null,
+      cst: draft.cst.trim() || null,
       name: draft.name.trim(),
       category: draft.category.trim(),
       size: draft.size.trim() || null,

@@ -70,6 +70,9 @@ def test_product_cost_and_tax_rates_are_saved_and_validated(
         headers=admin,
         json={
             "sku": "FISCAL-1",
+            "barcode": "7891234567890",
+            "ncm": "12345678",
+            "cst": "060",
             "name": "Produto fiscal",
             "category": "Geral",
             "price": "25.90",
@@ -86,15 +89,26 @@ def test_product_cost_and_tax_rates_are_saved_and_validated(
     assert response.json()["ipi_rate"] == "5.00"
     assert response.json()["pis_rate"] == "1.65"
     assert response.json()["cofins_rate"] == "7.60"
+    assert response.json()["barcode"] == "7891234567890"
+    assert response.json()["ncm"] == "12345678"
+    assert response.json()["cst"] == "060"
 
     updated = client.patch(
         f"/api/v1/admin/products/{response.json()['id']}",
         headers=admin,
-        json={"cost_price": "14.00", "cofins_rate": "8.00"},
+        json={
+            "cost_price": "14.00",
+            "cofins_rate": "8.00",
+            "barcode": "7891234567891",
+            "cst": "00",
+        },
     )
     assert updated.status_code == 200
     assert updated.json()["cost_price"] == "14.00"
     assert updated.json()["cofins_rate"] == "8.00"
+    assert updated.json()["barcode"] == "7891234567891"
+    assert updated.json()["ncm"] == "12345678"
+    assert updated.json()["cst"] == "00"
 
     invalid_rate = client.patch(
         f"/api/v1/admin/products/{response.json()['id']}",
@@ -102,6 +116,27 @@ def test_product_cost_and_tax_rates_are_saved_and_validated(
         json={"icms_rate": "100.01"},
     )
     assert invalid_rate.status_code == 422
+
+
+def test_product_rejects_invalid_fiscal_identifiers(client: TestClient) -> None:
+    admin = headers(client)
+    for fields in (
+        {"barcode": "abc123"},
+        {"ncm": "1234567"},
+        {"cst": "6"},
+    ):
+        response = client.post(
+            "/api/v1/admin/products",
+            headers=admin,
+            json={
+                "sku": "INVALID-FISCAL",
+                "name": "Produto",
+                "category": "Geral",
+                "price": "10.00",
+                **fields,
+            },
+        )
+        assert response.status_code == 422
 
 
 def create_product(

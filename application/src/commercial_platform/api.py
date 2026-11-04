@@ -63,6 +63,7 @@ from commercial_platform.schemas import (
     SupplierCreate,
     SupplierResponse,
     TenantSlug,
+    TenantRegistrationRequest,
     TokenResponse,
 )
 from commercial_platform.security import (
@@ -178,6 +179,16 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             return True
         return "products.tenant_id, products.sku" in str(original_error)
 
+    def is_duplicate_tenant_registration_error(error: IntegrityError) -> bool:
+        original_error = error.orig
+        constraint_name = getattr(getattr(original_error, "diag", None), "constraint_name", None)
+        if constraint_name in {"tenants_slug_key", "users_email_key"}:
+            return True
+        return (
+            "UNIQUE constraint failed: tenants.slug" in str(original_error)
+            or "UNIQUE constraint failed: users.email" in str(original_error)
+        )
+
     def get_tenant_product(
         session: Session, tenant_id: UUID, product_id: UUID, *, lock: bool = False
     ) -> Product:
@@ -254,6 +265,61 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
             )
         )
         session.commit()
+        token, lifetime = issue_access_token(user, membership, settings)
+        return TokenResponse(access_token=token, expires_in=lifetime)
+
+    @router.post(
+        "/auth/register",
+        response_model=TokenResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def register_tenant(
+        payload: TenantRegistrationRequest,
+        session: Annotated[Session, Depends(get_session)],
+    ) -> TokenResponse:
+        if session.scalar(select(Tenant.id).where(Tenant.slug == payload.tenant_slug)):
+            raise HTTPException(
+                status_code=409,
+                detail="O identificador da empresa já está em uso.",
+            )
+        email = str(payload.email).lower()
+        if session.scalar(select(User.id).where(User.email == email)):
+            raise HTTPException(
+                status_code=409,
+                detail="Este e-mail já possui acesso ao sistema.",
+            )
+
+        tenant = Tenant(
+            slug=payload.tenant_slug,
+            display_name=payload.company_name,
+            status=TenantStatus.ACTIVE,
+        )
+        user = User(
+            email=email,
+            password_hash=hash_password(payload.password),
+            is_active=True,
+        )
+        try:
+            session.add_all((tenant, user))
+            session.flush()
+            membership = TenantMembership(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                display_name=payload.admin_name,
+                role=MembershipRole.COMPANY_ADMIN,
+                is_active=True,
+            )
+            session.add(membership)
+            session.commit()
+        except IntegrityError as error:
+            session.rollback()
+            if is_duplicate_tenant_registration_error(error):
+                raise HTTPException(
+                    status_code=409,
+                    detail="O identificador da empresa ou o e-mail já está em uso.",
+                ) from None
+            raise
+
         token, lifetime = issue_access_token(user, membership, settings)
         return TokenResponse(access_token=token, expires_in=lifetime)
 
@@ -513,6 +579,9 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
         product = Product(
             tenant_id=context.tenant.id,
             sku=payload.sku,
+            barcode=payload.barcode,
+            ncm=payload.ncm,
+            cst=payload.cst,
             name=payload.name.strip(),
             category=payload.category.strip(),
             size=payload.size,

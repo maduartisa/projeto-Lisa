@@ -149,6 +149,9 @@ class Product(Base):
         Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    barcode: Mapped[str | None] = mapped_column(String(32))
+    ncm: Mapped[str | None] = mapped_column(String(8))
+    cst: Mapped[str | None] = mapped_column(String(3))
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     size: Mapped[str | None] = mapped_column(String(64))

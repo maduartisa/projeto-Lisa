@@ -16,6 +16,9 @@ export type OrderStatus =
 export type Product = {
   id: string;
   sku: string;
+  barcode: string | null;
+  ncm: string | null;
+  cst: string | null;
   name: string;
   category: string;
   size: string | null;

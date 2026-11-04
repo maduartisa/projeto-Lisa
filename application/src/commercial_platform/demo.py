@@ -32,6 +32,9 @@ def upgrade_demo_schema(engine: Engine) -> None:
         column["name"] for column in inspect(engine).get_columns("customers")
     }
     product_fields = {
+        "barcode": "VARCHAR(32)",
+        "ncm": "VARCHAR(8)",
+        "cst": "VARCHAR(3)",
         "cost_price": "NUMERIC(12, 2) NOT NULL DEFAULT 0",
         "icms_rate": "NUMERIC(5, 2) NOT NULL DEFAULT 0",
         "ipi_rate": "NUMERIC(5, 2) NOT NULL DEFAULT 0",

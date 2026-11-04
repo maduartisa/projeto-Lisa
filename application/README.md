@@ -1,6 +1,6 @@
 # Aplicação — automação comercial
 
-A aplicação reúne API FastAPI e interface web responsiva para catálogo, operação de balcão e administração multiempresa. Inclui cadastro de clientes com CPF/CNPJ e endereço; produtos com grade de tamanho/cor por SKU, preço de custo e alíquotas informativas de ICMS, IPI, PIS e COFINS; fornecedores, funcionários, compras, estoque, pedidos, contas a pagar/receber e auditoria de acessos. As alíquotas não calculam tributos automaticamente e devem ser confirmadas com a contabilidade. O checkout online apenas envia pedido para confirmação e não processa pagamentos.
+A aplicação reúne API FastAPI e interface web responsiva para catálogo, operação de balcão e administração multiempresa. Inclui cadastro de clientes com CPF/CNPJ e endereço; produtos com grade de tamanho/cor por SKU, código de barras, NCM, CST/CSOSN, preço de custo e alíquotas informativas de ICMS, IPI, PIS e COFINS; fornecedores, funcionários, compras, estoque, pedidos, contas a pagar/receber e auditoria de acessos. As alíquotas são editáveis para referência da empresa no DF, não calculam tributos automaticamente e devem ser confirmadas com a contabilidade. O checkout online apenas envia pedido para confirmação e não processa pagamentos.
 
 ## Teste rápido com dados fictícios
 
@@ -25,6 +25,8 @@ npm run dev
 ```
 
 Abra `http://localhost:3000`. Os cadastros de demonstração são reinicializados apenas se o banco local for apagado; os dados criados durante o teste permanecem nesse arquivo.
+
+Na tela inicial, use **Cadastre sua empresa** para criar uma empresa e o primeiro acesso de administradora. Informe nome da empresa, identificador único, nome da administradora, e-mail e senha com pelo menos 12 caracteres. Após o cadastro, a sessão é iniciada automaticamente; os próximos acessos usam e-mail, senha e identificador da empresa. O cadastro está disponível para usuários com acesso ao serviço e não substitui controles de habilitação comercial.
 
 ## Requisitos para PostgreSQL
 
@@ -60,6 +62,7 @@ O comando de bootstrap solicita slug, nome comercial, e-mail e senha inicial em 
 
 - `GET /health/live`: processo ativo.
 - `GET /health/ready`: verifica conexão com banco.
+- `POST /api/v1/auth/register`: cadastra uma empresa e sua primeira pessoa administradora e retorna a sessão autenticada.
 - `POST /api/v1/auth/token`: autentica usuário, senha e slug da empresa e emite token de curta duração.
 - `GET /api/v1/auth/me`: retorna o usuário e o tenant fixado no token.
 - `GET /api/v1/admin/tenants/me`: exemplo de rota administrativa autenticada.
