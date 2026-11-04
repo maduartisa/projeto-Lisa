@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: platform
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: local-only-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform -d platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - platform-db:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./application
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn commercial_platform.asgi:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+psycopg://platform:local-only-password@db:5432/platform
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-only-development-secret-not-for-production-000000000000}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health/live', timeout=2).read()
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  web:
+    build:
+      context: ./application/web
+      args:
+        API_SERVER_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  platform-db:
