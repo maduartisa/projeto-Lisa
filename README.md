@@ -13,3 +13,7 @@ Documentação do projeto:
 O projeto CDK em [`infrastructure/`](infrastructure/README.md) contém a infraestrutura-base para AWS; não foi implantado.
 
 A aplicação em [`application/`](application/README.md) inclui uma interface web responsiva para catálogo e operação comercial, com autenticação multiempresa, clientes, equipe e perfis, produtos com variações de tamanho/cor e SKU próprio, compras, estoque, pedidos online sem cobrança, PDV operacional, financeiro básico e auditoria de acessos. Gateways de pagamento, emissão fiscal, WhatsApp/IA e deploy AWS continuam como fases futuras.
+
+## Executar localmente no Windows
+
+Com o Docker Desktop instalado e em execução, abra [`iniciar-local.bat`](iniciar-local.bat) e escolha **Iniciar aplicacao**. O script inicia API, interface e banco de dados; quando terminar, acesse `http://localhost:3000`. Escolha **Parar aplicacao** para parar os serviços sem apagar os dados. A opção **Ver estado** mostra os serviços do Compose.
