@@ -5,13 +5,14 @@ import {
   Check,
   Clock3,
   FileClock,
+  FileUp,
   Plus,
   ReceiptText,
   Truck,
   UserRoundCog,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate, formatQuantity, roleLabels } from "@/lib/format";
@@ -49,6 +50,7 @@ type Props = {
 };
 
 type PurchaseLine = { product_id: string; quantity: string; unit_cost: string };
+type PurchaseImportResult = { purchase: Purchase; created_products: number };
 
 const EMPTY_LINE: PurchaseLine = { product_id: "", quantity: "1", unit_cost: "" };
 
@@ -307,8 +309,10 @@ export function OperationsModule({ view, token, products, onRefresh }: Props) {
   const [logs, setLogs] = useState<AccessLog[]>([]);
   const [modal, setModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
+  const invoiceInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -382,6 +386,39 @@ export function OperationsModule({ view, token, products, onRefresh }: Props) {
     }
   }
 
+  async function importNfe(file: File) {
+    if (!file.name.toLowerCase().endsWith(".xml")) {
+      toast("error", "Selecione um arquivo XML de NF-e.");
+      return;
+    }
+    if (file.size > 2_000_000) {
+      toast("error", "O arquivo XML da NF-e excede o limite de 2 MB.");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const result = await api<PurchaseImportResult>(
+        "/api/v1/admin/purchases/import-nfe",
+        token,
+        { method: "POST", body: JSON.stringify({ xml: await file.text() }) },
+      );
+      const createdMessage = result.created_products
+        ? ` ${result.created_products} produto(s) novo(s) cadastrado(s); revise os preços de venda antes de comercializá-los.`
+        : "";
+      toast(
+        "success",
+        `NF-e ${result.purchase.invoice_number ?? ""} importada; estoque e contas a pagar atualizados.${createdMessage}`,
+      );
+      await load();
+      await onRefresh();
+    } catch (issue) {
+      toast("error", issue instanceof Error ? issue.message : "Não foi possível importar a NF-e.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const config = {
     suppliers: { title: "Fornecedores", description: "Contatos e parceiros da sua operação.", icon: Truck, action: "Novo fornecedor" },
     purchases: { title: "Compras", description: "Registre entradas e acompanhe recebimentos.", icon: ReceiptText, action: "Registrar compra" },
@@ -399,8 +436,30 @@ export function OperationsModule({ view, token, products, onRefresh }: Props) {
           <h1>{config.title}</h1>
           <p className="page-lead">{config.description}</p>
         </div>
+        {view === "purchases" ? (
+          <>
+            <input
+              accept=".xml,text/xml,application/xml"
+              hidden
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = "";
+                if (file) void importNfe(file);
+              }}
+              ref={invoiceInput}
+              type="file"
+            />
+            <Button loading={importing} onClick={() => invoiceInput.current?.click()} variant="secondary">
+              <FileUp size={16} /> Importar NF-e XML
+            </Button>
+          </>
+        ) : null}
         {config.action ? <Button onClick={() => setModal(true)}><Plus size={16} /> {config.action}</Button> : null}
       </section>
+
+      {view === "purchases" ? (
+        <p className="page-lead">A NF-e cadastra automaticamente o fornecedor e os produtos ausentes e atualiza o estoque imediatamente. Produtos novos recebem preço inicial igual ao custo da nota; revise o preço de venda.</p>
+      ) : null}
 
       <section className="surface-card">
         {loading ? (
@@ -424,7 +483,7 @@ export function OperationsModule({ view, token, products, onRefresh }: Props) {
           <div className="table-scroll"><table className="data-table">
             <thead><tr><th>Compra</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Data</th><th>Situação</th><th>Ações</th></tr></thead>
             <tbody>{purchases.map((purchase) => <tr key={purchase.id}>
-              <td className="order-reference">#{purchase.id.slice(0, 8).toUpperCase()}</td>
+              <td className="order-reference">{purchase.invoice_number ? `NF-e ${purchase.invoice_number}` : `#${purchase.id.slice(0, 8).toUpperCase()}`}</td>
               <td className="table-primary">{supplierById.get(purchase.supplier_id) || "Fornecedor"}</td>
               <td>{purchase.items.reduce((sum, item) => sum + Number(item.quantity), 0)}</td>
               <td>{formatCurrency(purchase.total)}</td><td className="table-muted">{formatDate(purchase.created_at)}</td>

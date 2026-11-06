@@ -589,6 +589,10 @@ class PurchaseCreate(BaseModel):
         return self
 
 
+class PurchaseImportRequest(BaseModel):
+    xml: str = Field(min_length=1, max_length=2_000_000)
+
+
 class PurchaseStatusUpdate(BaseModel):
     status: str = Field(pattern=r"^(received|cancelled)$")
 
@@ -608,10 +612,16 @@ class PurchaseResponse(BaseModel):
 
     id: UUID
     supplier_id: UUID
+    invoice_number: str | None = None
     status: str
     total: Decimal
     created_at: datetime
     items: list[PurchaseItemResponse]
+
+
+class PurchaseImportResponse(BaseModel):
+    purchase: PurchaseResponse
+    created_products: int
 
 
 class FinancialEntryCreate(BaseModel):

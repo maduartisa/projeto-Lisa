@@ -334,6 +334,11 @@ class Purchase(Base):
             name="fk_purchases_supplier_same_tenant",
         ),
         UniqueConstraint("tenant_id", "id", name="uq_purchases_tenant_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "invoice_access_key",
+            name="uq_purchases_tenant_invoice_access_key",
+        ),
         Index("ix_purchases_tenant_created", "tenant_id", "created_at"),
     )
 
@@ -342,6 +347,8 @@ class Purchase(Base):
         Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     supplier_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    invoice_access_key: Mapped[str | None] = mapped_column(String(44))
+    invoice_number: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

@@ -70,6 +70,12 @@ uvicorn commercial_platform.asgi:app --host 127.0.0.1 --port 8000
 
 O comando de bootstrap solicita slug, nome comercial, e-mail e senha inicial em prompts; a senha não é passada na linha de comando. Aplique a migração antes de criar a empresa.
 
+## Importar nota fiscal de compra
+
+Em **Compras**, selecione **Importar NF-e XML** e escolha o arquivo `.xml` (até 2 MB). O sistema associa produtos pelo código de barras e, quando necessário, pelo SKU. Produtos ausentes são cadastrados automaticamente com a descrição, o NCM e o custo da nota; o preço de venda inicial fica igual ao custo e deve ser revisado antes de comercializar. O fornecedor é localizado pelo CPF/CNPJ ou cadastrado a partir do XML.
+
+A importação registra a compra como recebida imediatamente, lança os itens no estoque e cria uma conta a pagar com o valor total da NF-e. Uma chave de acesso já importada não pode ser processada novamente. A leitura do XML não consulta a SEFAZ nem valida assinatura, autorização ou cancelamento da nota; confira a procedência e a situação fiscal antes de importar.
+
 ## Rotas iniciais
 
 - `GET /health/live`: processo ativo.
@@ -86,6 +92,7 @@ O comando de bootstrap solicita slug, nome comercial, e-mail e senha inicial em 
 - `GET|POST /api/v1/admin/suppliers`: consulta e cadastro de fornecedores.
 - `GET|POST /api/v1/admin/employees`, `PATCH /api/v1/admin/employees/{membership_id}`: gestão de funcionários e acessos (administradora).
 - `GET|POST /api/v1/admin/purchases`, `PATCH /api/v1/admin/purchases/{purchase_id}/status`: compras; ao receber, registra entradas de estoque e conta a pagar.
+- `POST /api/v1/admin/purchases/import-nfe`: importa uma NF-e XML, cadastra produtos ausentes e registra a entrada no estoque e o contas a pagar.
 - `GET|POST /api/v1/admin/finance`, `PATCH /api/v1/admin/finance/{entry_id}/settle`: lançamentos financeiros e baixa de contas.
 - `GET /api/v1/admin/access-logs`: atividades autenticadas da empresa (administradora).
 - `POST /api/v1/admin/products/{product_id}/inventory`: ajuste controlado de estoque.

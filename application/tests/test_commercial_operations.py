@@ -23,6 +23,21 @@ def create_product(client, auth_headers):
     return response.json()
 
 
+def nfe_xml(access_key: str = "1" * 44) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
+  <NFe><infNFe Id="NFe{access_key}">
+    <ide><nNF>12345</nNF></ide>
+    <emit><CNPJ>12345678000199</CNPJ><xNome>Fornecedor da Nota</xNome></emit>
+    <det nItem="1"><prod>
+      <cProd>AUTO-001</cProd><cEAN>7891234567890</cEAN>
+      <xProd>Produto importado</xProd><NCM>61091000</NCM>
+      <qCom>3.0000</qCom><vUnCom>9.60</vUnCom><vProd>28.80</vProd>
+    </prod><imposto><ICMS><ICMS00><CST>00</CST></ICMS00></ICMS></imposto></det>
+    <total><ICMSTot><vNF>28.80</vNF></ICMSTot></total>
+  </infNFe></NFe></nfeProc>"""
+
+
 def test_purchase_receipt_updates_stock_and_finance(client):
     admin = headers(login(client, "empresa-a"))
     product = create_product(client, admin)
@@ -78,6 +93,117 @@ def test_purchase_receipt_updates_stock_and_finance(client):
     )
     assert settlement.status_code == 200
     assert settlement.json()["status"] == "settled"
+
+
+def test_nfe_import_creates_missing_products_and_receives_stock_once(client):
+    admin = headers(login(client, "empresa-a"))
+
+    imported = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin,
+        json={"xml": nfe_xml()},
+    )
+    assert imported.status_code == 201, imported.text
+    result = imported.json()
+    assert result["created_products"] == 1
+    assert result["purchase"]["invoice_number"] == "12345"
+    assert result["purchase"]["status"] == "received"
+    assert result["purchase"]["total"] == "28.80"
+
+    products = client.get("/api/v1/admin/products", headers=admin).json()
+    product = next(item for item in products if item["sku"] == "AUTO-001")
+    assert product["name"] == "Produto importado"
+    assert product["barcode"] == "7891234567890"
+    assert product["ncm"] == "61091000"
+    assert product["cst"] == "00"
+    assert product["stock_quantity"] == "3.000"
+    assert product["price"] == "9.60"
+
+    movements = client.get(
+        f"/api/v1/admin/products/{product['id']}/inventory",
+        headers=admin,
+    )
+    assert any(
+        movement["movement_type"] == "purchase"
+        and movement["quantity_delta"] == "3.000"
+        for movement in movements.json()
+    )
+    entries = client.get("/api/v1/admin/finance", headers=admin).json()
+    assert any(
+        entry["description"].startswith("NF-e 12345")
+        and entry["amount"] == "28.80"
+        for entry in entries
+    )
+
+    duplicate = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin,
+        json={"xml": nfe_xml()},
+    )
+    assert duplicate.status_code == 409
+    products_after_duplicate = client.get(
+        "/api/v1/admin/products", headers=admin
+    ).json()
+    assert next(
+        item for item in products_after_duplicate if item["id"] == product["id"]
+    )["stock_quantity"] == "3.000"
+
+
+def test_nfe_import_matches_existing_barcode_and_is_tenant_scoped(client):
+    admin_a = headers(login(client, "empresa-a"))
+    product = create_product(client, admin_a)
+    updated = client.patch(
+        f"/api/v1/admin/products/{product['id']}",
+        headers=admin_a,
+        json={"barcode": "7891234567890"},
+    )
+    assert updated.status_code == 200
+
+    imported = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin_a,
+        json={"xml": nfe_xml("2" * 44)},
+    )
+    assert imported.status_code == 201, imported.text
+    assert imported.json()["created_products"] == 0
+    assert imported.json()["purchase"]["items"][0]["product_id"] == product["id"]
+
+    admin_b = headers(login(client, "empresa-b"))
+    isolated_import = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin_b,
+        json={"xml": nfe_xml("2" * 44)},
+    )
+    assert isolated_import.status_code == 201
+    assert isolated_import.json()["created_products"] == 1
+    assert client.get("/api/v1/admin/products", headers=admin_b).json()[0]["sku"] == (
+        "AUTO-001"
+    )
+
+
+def test_nfe_import_rejects_malformed_and_unsafe_xml(client):
+    admin = headers(login(client, "empresa-a"))
+    malformed = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin,
+        json={"xml": "<NF-e>incompleta"},
+    )
+    assert malformed.status_code == 422
+
+    unsafe = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin,
+        json={"xml": '<!DOCTYPE nfe [<!ENTITY x "x">]><nfe>&x;</nfe>'},
+    )
+    assert unsafe.status_code == 422
+
+    unsupported_quantity = client.post(
+        "/api/v1/admin/purchases/import-nfe",
+        headers=admin,
+        json={"xml": nfe_xml().replace("<qCom>3.0000</qCom>", "<qCom>3.0001</qCom>")},
+    )
+    assert unsupported_quantity.status_code == 422
+    assert client.get("/api/v1/admin/purchases", headers=admin).json() == []
 
 
 def test_employee_management_and_access_logs_are_tenant_scoped(client):

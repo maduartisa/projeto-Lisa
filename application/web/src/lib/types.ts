@@ -130,6 +130,7 @@ export type Supplier = {
 export type Purchase = {
   id: string;
   supplier_id: string;
+  invoice_number: string | null;
   status: "draft" | "received" | "cancelled";
   total: string;
   created_at: string;

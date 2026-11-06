@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import hashlib
+import re
 from typing import Annotated
 from uuid import UUID
 
@@ -34,6 +36,7 @@ from commercial_platform.models import (
     TenantStatus,
     User,
 )
+from commercial_platform.nfe import MAX_NFE_ITEMS, NfeItem, parse_nfe
 from commercial_platform.schemas import (
     AccessLogResponse,
     CurrentUserResponse,
@@ -53,6 +56,8 @@ from commercial_platform.schemas import (
     PublicOrderCreate,
     PublicOrderReceipt,
     PurchaseCreate,
+    PurchaseImportRequest,
+    PurchaseImportResponse,
     PurchaseResponse,
     PurchaseStatusUpdate,
     ProductCreate,
@@ -1142,6 +1147,200 @@ def create_app(settings: Settings, session_factory: sessionmaker[Session]) -> Fa
                 .offset(offset)
             ).all()
         )
+
+    @router.post(
+        "/admin/purchases/import-nfe",
+        response_model=PurchaseImportResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def import_nfe(
+        payload: PurchaseImportRequest,
+        context: Annotated[AuthContext, Depends(current_context)],
+        session: Annotated[Session, Depends(get_session)],
+    ) -> dict:
+        require_role(context, MembershipRole.COMPANY_ADMIN, MembershipRole.INVENTORY_MANAGER)
+        try:
+            invoice = parse_nfe(payload.xml)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+        if session.scalar(
+            select(Purchase.id).where(
+                Purchase.tenant_id == context.tenant.id,
+                Purchase.invoice_access_key == invoice.access_key,
+            )
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A NF-e {invoice.number} já foi importada.",
+            )
+
+        suppliers = session.scalars(
+            select(Supplier).where(Supplier.tenant_id == context.tenant.id)
+        ).all()
+        normalized_document = "".join(
+            character for character in invoice.supplier_document if character.isdigit()
+        )
+        supplier = next(
+            (
+                item
+                for item in suppliers
+                if item.document
+                and "".join(character for character in item.document if character.isdigit())
+                == normalized_document
+            ),
+            None,
+        )
+        if supplier is None:
+            supplier = Supplier(
+                tenant_id=context.tenant.id,
+                name=invoice.supplier_name,
+                document=normalized_document,
+            )
+            session.add(supplier)
+            session.flush()
+
+        product_by_id: dict[UUID, Product] = {}
+        product_for_line: list[tuple[NfeItem, Product]] = []
+        created_products = 0
+        products_by_barcode: dict[str, list[Product]] = {}
+        products_by_sku: dict[str, Product] = {}
+        for product in session.scalars(
+            select(Product).where(Product.tenant_id == context.tenant.id)
+        ):
+            products_by_sku[product.sku] = product
+            if product.barcode:
+                products_by_barcode.setdefault(product.barcode, []).append(product)
+
+        for item in invoice.items[:MAX_NFE_ITEMS]:
+            matched = None
+            if item.barcode and item.barcode in products_by_barcode:
+                matches = products_by_barcode[item.barcode]
+                if len(matches) > 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Há mais de um produto cadastrado com o código de barras {item.barcode}.",
+                    )
+                matched = matches[0]
+            if matched is None:
+                matched = products_by_sku.get(item.code)
+                if matched is not None and item.barcode and matched.barcode not in {
+                    None,
+                    item.barcode,
+                }:
+                    matched = None
+
+            if matched is None:
+                sku = item.code if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", item.code) else ""
+                existing_sku = products_by_sku.get(sku) if sku else None
+                if existing_sku is not None:
+                    sku = ""
+                if not sku:
+                    sku = f"NF-{hashlib.sha256(f'{invoice.access_key}:{item.code}'.encode()).hexdigest()[:16].upper()}"
+                    suffix = 1
+                    while sku in products_by_sku:
+                        sku = f"NF-{hashlib.sha256(f'{invoice.access_key}:{item.code}:{suffix}'.encode()).hexdigest()[:16].upper()}"
+                        suffix += 1
+                matched = Product(
+                    tenant_id=context.tenant.id,
+                    sku=sku,
+                    barcode=item.barcode,
+                    ncm=item.ncm,
+                    cst=item.cst,
+                    name=item.name,
+                    category="Importado por NF-e",
+                    price=item.unit_cost.quantize(CENT, rounding=ROUND_HALF_UP),
+                    cost_price=item.unit_cost.quantize(CENT, rounding=ROUND_HALF_UP),
+                    stock_quantity=Decimal("0"),
+                    is_active=True,
+                )
+                session.add(matched)
+                session.flush()
+                products_by_sku[matched.sku] = matched
+                if matched.barcode:
+                    products_by_barcode.setdefault(matched.barcode, []).append(matched)
+                created_products += 1
+            elif item.barcode and matched.barcode is None:
+                matched.barcode = item.barcode
+
+            product_by_id[matched.id] = matched
+            product_for_line.append((item, matched))
+
+        grouped_items: dict[UUID, tuple[Decimal, Decimal]] = {}
+        for item, product in product_for_line:
+            quantity, total_cost = grouped_items.get(
+                product.id, (Decimal("0"), Decimal("0"))
+            )
+            grouped_items[product.id] = (
+                quantity + item.quantity,
+                total_cost + item.quantity * item.unit_cost,
+            )
+
+        purchase_items = []
+        for product_id, (quantity, total_cost) in sorted(grouped_items.items()):
+            unit_cost = (total_cost / quantity).quantize(CENT, rounding=ROUND_HALF_UP)
+            line_total = (quantity * unit_cost).quantize(CENT, rounding=ROUND_HALF_UP)
+            purchase_items.append(
+                PurchaseItem(
+                    tenant_id=context.tenant.id,
+                    product_id=product_id,
+                    quantity=quantity,
+                    unit_cost=unit_cost,
+                    line_total=line_total,
+                )
+            )
+
+        purchase = Purchase(
+            tenant_id=context.tenant.id,
+            supplier_id=supplier.id,
+            invoice_access_key=invoice.access_key,
+            invoice_number=invoice.number,
+            status="received",
+            total=invoice.total,
+            items=purchase_items,
+        )
+        session.add(purchase)
+        session.flush()
+        for item in purchase.items:
+            product = product_by_id[item.product_id]
+            product.stock_quantity += item.quantity
+            session.add(
+                InventoryMovement(
+                    tenant_id=context.tenant.id,
+                    product_id=product.id,
+                    quantity_delta=item.quantity,
+                    movement_type=InventoryMovementType.PURCHASE,
+                    reference_id=purchase.id,
+                    note=f"Entrada pela NF-e {invoice.number}.",
+                )
+            )
+        session.add(
+            FinancialEntry(
+                tenant_id=context.tenant.id,
+                entry_type="payable",
+                description=f"NF-e {invoice.number} - {supplier.name}",
+                amount=invoice.total,
+                due_date=date.today(),
+                status="pending",
+            )
+        )
+        try:
+            session.commit()
+        except IntegrityError as error:
+            session.rollback()
+            if session.scalar(
+                select(Purchase.id).where(
+                    Purchase.tenant_id == context.tenant.id,
+                    Purchase.invoice_access_key == invoice.access_key,
+                )
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A NF-e {invoice.number} já foi importada.",
+                ) from error
+            raise
+        session.refresh(purchase)
+        return {"purchase": purchase, "created_products": created_products}
 
     @router.post(
         "/admin/purchases",

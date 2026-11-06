@@ -31,6 +31,9 @@ def upgrade_demo_schema(engine: Engine) -> None:
     customer_columns = {
         column["name"] for column in inspect(engine).get_columns("customers")
     }
+    purchase_columns = {
+        column["name"] for column in inspect(engine).get_columns("purchases")
+    }
     product_fields = {
         "barcode": "VARCHAR(32)",
         "ncm": "VARCHAR(8)",
@@ -57,6 +60,21 @@ def upgrade_demo_schema(engine: Engine) -> None:
                 connection.execute(
                     text(f"ALTER TABLE customers ADD COLUMN {field} {column_type}")
                 )
+        if "invoice_access_key" not in purchase_columns:
+            connection.execute(
+                text("ALTER TABLE purchases ADD COLUMN invoice_access_key VARCHAR(44)")
+            )
+        if "invoice_number" not in purchase_columns:
+            connection.execute(
+                text("ALTER TABLE purchases ADD COLUMN invoice_number VARCHAR(20)")
+            )
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "uq_purchases_tenant_invoice_access_key "
+                "ON purchases (tenant_id, invoice_access_key)"
+            )
+        )
 
 
 def main() -> None:
