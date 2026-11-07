@@ -2,6 +2,8 @@
 
 Projeto de infraestrutura-base para a plataforma comercial multiempresa. O CDK cria rede privada, PostgreSQL, armazenamento de objetos, repositórios ECR e cluster ECS. A aplicação possui API e frontend no repositório, mas ainda não há Dockerfiles/imagens, serviços Fargate, balanceador ou endpoint público: este stack não publica o site.
 
+Para um piloto de menor custo sem Docker, consulte [o guia Lightsail](../docs/sdd/07-deploy-aws-baixo-custo.md). A stack abaixo pode criar recursos com custo recorrente significativo, especialmente NAT Gateway e RDS.
+
 ## Requisitos locais
 
 - Python 3.11 ou superior compatível com as dependências fixadas.

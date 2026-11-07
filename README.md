@@ -9,6 +9,7 @@ Documentação do projeto:
 - [Fase 4 — Manual de instalação, operação e validação](docs/sdd/04-manual-instalacao-operacao-validacao.md)
 - [Fase 5 — Guia de infraestrutura AWS CDK](docs/sdd/05-guia-infraestrutura-cdk-implantacao.md)
 - [Fase 6 — Implementação local da infraestrutura CDK](docs/sdd/06-implementacao-infraestrutura-cdk.md)
+- [Deploy AWS de baixo custo — sem Docker](docs/sdd/07-deploy-aws-baixo-custo.md)
 
 O projeto CDK em [`infrastructure/`](infrastructure/README.md) contém a infraestrutura-base para AWS; não foi implantado.
 
