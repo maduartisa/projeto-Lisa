@@ -1,32 +1,32 @@
-# Deploy AWS de baixo custo — sem Docker
+# Deploy AWS de baixo custo ? sem Docker
 
-## Recomendação
+## Recomenda??o
 
-Para um piloto, use uma única instância Linux no Amazon Lightsail. Instale PostgreSQL 17, a API FastAPI e o frontend Next.js diretamente no Ubuntu; execute API e frontend como serviços `systemd` e use Caddy como proxy HTTPS. Assim, não há Docker, NAT Gateway, RDS, ECR, ECS Fargate nem Application Load Balancer.
+Para um piloto, use uma ?nica inst?ncia Linux no Amazon Lightsail. Instale PostgreSQL 17, a API FastAPI e o frontend Next.js diretamente no Ubuntu; execute API e frontend como servi?os `systemd` e use Caddy como proxy HTTPS. Assim, n?o h? Docker, NAT Gateway, RDS, ECR, ECS Fargate nem Application Load Balancer.
 
-| Componente | Configuração inicial sugerida |
+| Componente | Configura??o inicial sugerida |
 |---|---|
-| Região | `sa-east-1` para reduzir latência no Brasil; confira o preço antes de criar |
-| VM | Ubuntu 24.04, plano com pelo menos 2 GB RAM e IPv4 público |
-| Serviços | PostgreSQL 17, API e Next.js na mesma VM; Caddy termina HTTPS |
-| Rede | SSH apenas do IP do operador; HTTP/HTTPS públicos; portas 3000, 5432 e 8000 somente locais |
-| Orçamento | AWS Budget de alerta em valor baixo, por exemplo US$ 20/mês |
+| Regi?o | `sa-east-1` para reduzir lat?ncia no Brasil; confira o pre?o antes de criar |
+| VM | Ubuntu 24.04, plano com pelo menos 2 GB RAM e IPv4 p?blico |
+| Servi?os | PostgreSQL 17, API e Next.js na mesma VM; Caddy termina HTTPS |
+| Rede | SSH apenas do IP do operador; HTTP/HTTPS p?blicos; portas 3000, 5432 e 8000 somente locais |
+| Or?amento | AWS Budget de alerta em valor baixo, por exemplo US$ 20/m?s |
 
-Como referência, um plano de 2 GB costuma custar na ordem de dezenas baixas de dólares mensais, mas o preço muda por região, plano, impostos e alterações comerciais. Confira o valor final em `sa-east-1` no console do Lightsail antes de confirmar. US$ 100 em créditos cobrem alguns meses, não um prazo garantido. Domínio, snapshots, tráfego excedente e recursos esquecidos também podem consumir créditos. Confirme em **Billing and Cost Management → Credits** se o crédito está ativo e quais serviços cobre.
+Como refer?ncia, um plano de 2 GB costuma custar na ordem de dezenas baixas de d?lares mensais, mas o pre?o muda por regi?o, plano, impostos e altera??es comerciais. Confira o valor final em `sa-east-1` no console do Lightsail antes de confirmar. US$ 100 em cr?ditos cobrem alguns meses, n?o um prazo garantido. Dom?nio, snapshots, tr?fego excedente e recursos esquecidos tamb?m podem consumir cr?ditos. Confirme em **Billing and Cost Management ? Credits** se o cr?dito est? ativo e quais servi?os cobre.
 
-Este arranjo é somente para demonstração e dados não críticos. Banco e aplicação compartilham uma VM, sem failover; perda da instância pode significar perda dos dados. Para produção, planeje banco gerenciado privado, backup testado, monitoramento e alta disponibilidade, aceitando o custo maior. A infraestrutura CDK atual não publica a aplicação e cria recursos adicionais com custo recorrente; não a use como atalho para este piloto.
+Este arranjo ? somente para demonstra??o e dados n?o cr?ticos. Banco e aplica??o compartilham uma VM, sem failover; perda da inst?ncia pode significar perda dos dados. Para produ??o, planeje banco gerenciado privado, backup testado, monitoramento e alta disponibilidade, aceitando o custo maior. A infraestrutura CDK atual n?o publica a aplica??o e cria recursos adicionais com custo recorrente; n?o a use como atalho para este piloto.
 
-## 1. Conta, orçamento e DNS
+## 1. Conta, or?amento e DNS
 
-1. Ative MFA na conta AWS. Não compartilhe credenciais nem grave chaves AWS no repositório.
-2. Crie um AWS Budget mensal e alertas de custo real e previsto, por exemplo em 50%, 80% e 100% do orçamento. Budgets pode atrasar e apenas alerta; não garante teto nem desliga recursos.
-3. Tenha um domínio próprio e acesso ao DNS. O domínio não está incluído no preço da VM.
+1. Ative MFA na conta AWS. N?o compartilhe credenciais nem grave chaves AWS no reposit?rio.
+2. Crie um AWS Budget mensal e alertas de custo real e previsto, por exemplo em 50%, 80% e 100% do or?amento. Budgets pode atrasar e apenas alerta; n?o garante teto nem desliga recursos.
+3. Tenha um dom?nio pr?prio e acesso ao DNS. O dom?nio n?o est? inclu?do no pre?o da VM.
 
 ## 2. Criar e proteger a VM
 
-No console AWS, crie uma instância Linux/Ubuntu 24.04 no Lightsail, na região escolhida. Selecione o menor bundle com pelo menos 2 GB e confira o preço total antes de criar. Use uma chave SSH própria.
+No console AWS, crie uma inst?ncia Linux/Ubuntu 24.04 no Lightsail, na regi?o escolhida. Selecione o menor bundle com pelo menos 2 GB e confira o pre?o total antes de criar. Use uma chave SSH pr?pria.
 
-Associe um IP estático e aponte o registro DNS `A` do domínio para ele. No firewall do Lightsail, permita TCP 22 somente do seu IP; permita TCP 80 e 443 publicamente. Não abra as portas 3000, 5432 ou 8000.
+Associe um IP est?tico e aponte o registro DNS `A` do dom?nio para ele. No firewall do Lightsail, permita TCP 22 somente do seu IP; permita TCP 80 e 443 publicamente. N?o abra as portas 3000, 5432 ou 8000.
 
 Conecte-se por SSH e instale PostgreSQL 17 e ferramentas de sistema:
 
@@ -56,11 +56,11 @@ psql --version
 caddy version
 ```
 
-Não use Node.js 18 do repositório padrão do Ubuntu: Next.js 16 exige versão mais nova.
+N?o use Node.js 18 do reposit?rio padr?o do Ubuntu: Next.js 16 exige vers?o mais nova.
 
-## 3. Preparar usuário, código e banco
+## 3. Preparar usu?rio, c?digo e banco
 
-Crie um usuário de sistema dedicado e coloque o código revisado em `/opt/lisa/app` por clone autorizado ou cópia segura. Não copie `.env`, chaves, bancos locais nem dados reais.
+Crie um usu?rio de sistema dedicado e coloque o c?digo revisado em `/opt/lisa/app` por clone autorizado ou c?pia segura. N?o copie `.env`, chaves, bancos locais nem dados reais.
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/lisa --shell /usr/sbin/nologin lisa
@@ -68,17 +68,17 @@ sudo install -d -o lisa -g lisa -m 750 /opt/lisa/app
 sudo -u lisa git clone <URL_DO_REPOSITORIO> /opt/lisa/app
 ```
 
-Se copiar os arquivos em vez de clonar, confirme que `/opt/lisa/app` pertence ao usuário `lisa` e contém `application/`.
+Se copiar os arquivos em vez de clonar, confirme que `/opt/lisa/app` pertence ao usu?rio `lisa` e cont?m `application/`.
 
-Crie o banco e o usuário da aplicação com privilégio apenas sobre esse banco:
+Crie o banco e o usu?rio da aplica??o com privil?gio apenas sobre esse banco:
 
 ```bash
 sudo -u postgres psql
 ```
 
-No prompt do PostgreSQL, execute `CREATE ROLE lisa_app LOGIN;`, depois `\password lisa_app` e informe uma senha forte quando solicitada (a senha não deve ser digitada como parte de um comando). Em seguida, execute `CREATE DATABASE platform OWNER lisa_app;` e `\q`.
+No prompt do PostgreSQL, execute `CREATE ROLE lisa_app LOGIN;`, depois `\password lisa_app` e informe uma senha forte quando solicitada (a senha n?o deve ser digitada como parte de um comando). Em seguida, execute `CREATE DATABASE platform OWNER lisa_app;` e `\q`.
 
-Crie `/etc/lisa/app.env` interativamente, sem colocar segredos nos argumentos do shell ou no histórico:
+Crie `/etc/lisa/app.env` interativamente, sem colocar segredos nos argumentos do shell ou no hist?rico:
 
 ```bash
 sudo install -d -o root -g lisa -m 750 /etc/lisa
@@ -92,7 +92,7 @@ unset DB_PASSWORD JWT_SECRET_KEY
 exit
 ```
 
-Não imprima esse arquivo em logs ou terminal.
+A vari?vel `DATABASE_URL` deve usar o driver `postgresql+psycopg`, incluir o usu?rio `lisa_app`, a senha informada no prompt e o endere?o local do PostgreSQL. N?o imprima esse arquivo em logs ou terminal.
 
 Crie o ambiente Python e instale a API:
 
@@ -102,7 +102,7 @@ sudo -u lisa /opt/lisa/app/application/.venv/bin/pip install --upgrade pip
 sudo -u lisa /opt/lisa/app/application/.venv/bin/pip install /opt/lisa/app/application
 ```
 
-Instale e compile o frontend. O endereço da API é definido na compilação porque o Next.js usa esse valor nos rewrites:
+Instale e compile o frontend. O endere?o da API ? definido na compila??o porque o Next.js usa esse valor nos rewrites:
 
 ```bash
 sudo -u lisa sh -c 'cd /opt/lisa/app/application/web && npm ci && API_SERVER_URL=http://127.0.0.1:8000 npm run build'
@@ -110,7 +110,7 @@ sudo -u lisa sh -c 'cd /opt/lisa/app/application/web && npm ci && API_SERVER_URL
 
 ## 4. Iniciar API e frontend com systemd
 
-Crie `/etc/systemd/system/lisa-api.service` com este conteúdo:
+Crie `/etc/systemd/system/lisa-api.service` com este conte?do:
 
 ```ini
 [Unit]
@@ -154,7 +154,7 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Ative os serviços e confira os logs:
+Ative os servi?os e confira os logs:
 
 ```bash
 sudo systemctl daemon-reload
@@ -165,7 +165,7 @@ sudo journalctl -u lisa-api -u lisa-web -n 100 --no-pager
 
 ## 5. Publicar HTTPS com Caddy
 
-Configure `/etc/caddy/Caddyfile`, trocando pelo domínio real:
+Configure `/etc/caddy/Caddyfile`, trocando pelo dom?nio real:
 
 ```caddy
 app.seudominio.com {
@@ -182,14 +182,14 @@ sudo systemctl enable --now caddy
 sudo systemctl reload caddy
 ```
 
-Com o DNS propagado e portas 80/443 abertas, o Caddy solicita e renova o certificado TLS automaticamente. Valide `https://app.seudominio.com` e `https://app.seudominio.com/health/ready`. API e banco continuam acessíveis apenas localmente.
+Com o DNS propagado e portas 80/443 abertas, o Caddy solicita e renova o certificado TLS automaticamente. Valide `https://app.seudominio.com` e `https://app.seudominio.com/health/ready`. API e banco continuam acess?veis apenas localmente.
 
-## 6. Operação e encerramento
+## 6. Opera??o e encerramento
 
 - Consulte estado com `sudo systemctl status lisa-api lisa-web caddy` e logs com `sudo journalctl -u lisa-api -u lisa-web -u caddy -n 100`.
-- Para atualizar, aplique uma versão revisada do código, reinstale dependências, recompile o frontend e reinicie os serviços. Faça backup antes das migrações.
-- Gere backups PostgreSQL e copie-os para fora da VM; teste a restauração. O disco da própria VM não é backup. Armazenamento remoto pode gerar custo adicional.
-- Para parar gastos recorrentes, faça backup e exclua a instância quando não precisar mais dela. Apenas parar a instância pode continuar cobrando o plano. Antes de excluir, confira snapshots e libere o IP estático se ficar desassociado.
-- Confira Billing e Cost Explorer após o primeiro dia e semanalmente enquanto usar o crédito.
+- Para atualizar, aplique uma vers?o revisada do c?digo, reinstale depend?ncias, recompile o frontend e reinicie os servi?os. Fa?a backup antes das migra??es.
+- Gere backups PostgreSQL e copie-os para fora da VM; teste a restaura??o. O disco da pr?pria VM n?o ? backup. Armazenamento remoto pode gerar custo adicional.
+- Para parar gastos recorrentes, fa?a backup e exclua a inst?ncia quando n?o precisar mais dela. Apenas parar a inst?ncia pode continuar cobrando o plano. Antes de excluir, confira snapshots e libere o IP est?tico se ficar desassociado.
+- Confira Billing e Cost Explorer ap?s o primeiro dia e semanalmente enquanto usar o cr?dito.
 
-Para desenvolvimento sem URL pública, continue usando o ambiente local e não crie recursos AWS. Para produção, desenhe uma arquitetura gerenciada e estime seu custo antes de provisionar. Este guia não executa operações na AWS.
+Para desenvolvimento sem URL p?blica, continue usando o ambiente local e n?o crie recursos AWS. Para produ??o, desenhe uma arquitetura gerenciada e estime seu custo antes de provisionar. Este guia n?o executa opera??es na AWS.
