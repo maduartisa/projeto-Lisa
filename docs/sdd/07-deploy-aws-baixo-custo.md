@@ -163,7 +163,20 @@ sudo systemctl status lisa-api lisa-web --no-pager
 sudo journalctl -u lisa-api -u lisa-web -n 100 --no-pager
 ```
 
-## 5. Publicar HTTPS com Caddy
+## 5. Publicar com Caddy
+
+Para validar a publicacao diretamente pelo IP informado, configure `/etc/caddy/Caddyfile` assim:
+
+```caddy
+http://18.220.138.23 {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+O endereco `http://18.220.138.23` dispensa dominio para um teste inicial, mas oferece somente HTTP, sem criptografia. Use-o apenas com dados ficticios; nao informe senhas nem dados reais. O IP publico pode mudar ao parar/iniciar a instancia; confirme o endereco atual ou associe um IP estatico/Elastic IP antes de divulgar.
+
+No security group/firewall da instancia, permita TCP 80 publicamente e mantenha SSH restrito ao IP do operador. As portas 3000, 5432 e 8000 devem continuar fechadas para acesso externo. A interface usa rewrites para a API: mantenha `API_SERVER_URL=http://127.0.0.1:8000`; nao substitua pelo IP publico.
 
 Configure `/etc/caddy/Caddyfile`, trocando pelo dom?nio real:
 
