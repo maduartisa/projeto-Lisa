@@ -18,6 +18,8 @@ lib/
 !application/web/src/lib/
 application/web/src/lib/*
 !application/web/src/lib/types.ts
+!application/web/src/lib/api.ts
+!application/web/src/lib/format.ts
 lib64/
 parts/
 sdist/

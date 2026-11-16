@@ -832,7 +832,14 @@ function OrdersPage({
   loading: boolean;
   mode?: "orders" | "pos";
 }) {
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState<"all" | OrderStatus>("all");
+  const filterTabs = [
+    ["all", "Todos"],
+    ["quote", "Orçamentos"],
+    ["pending", "Pendentes"],
+    ["separating", "Em separação"],
+    ["completed", "Concluídos"],
+  ] as const;
   const filtered = filter === "all" ? data.orders : data.orders.filter((order) => order.status === filter);
   return (
     <div className="page-content">
@@ -843,7 +850,7 @@ function OrdersPage({
       {mode === "pos" ? <p className="checkout-disclaimer pos-disclaimer">O PDV cria um pedido para confirmação. Não há captura de pagamento integrada; o estoque é baixado ao concluir o pedido.</p> : null}
       <div className="toolbar">
         <div className="filter-tabs" role="tablist" aria-label="Filtrar pedidos">
-          {[["all", "Todos"], ["quote", "Orçamentos"], ["pending", "Pendentes"], ["separating", "Em separação"], ["completed", "Concluídos"]].map(([value, label]) => (
+          {filterTabs.map(([value, label]) => (
             <button aria-selected={filter === value} className={`filter-tab ${filter === value ? "filter-tab-active" : ""}`} key={value} onClick={() => setFilter(value)} role="tab" type="button">{label}</button>
           ))}
         </div>
