@@ -58,7 +58,9 @@ services:
       retries: 5
       start_period: 20s
     ports:
-      - "127.0.0.1:3000:3000"
+      # O IPv4 publico da AWS e encaminhado para a interface privada da instancia.
+      # Acesse http://18.220.138.23:3000 e libere TCP 3000 no security group.
+      - "0.0.0.0:3000:3000"
 
 volumes:
   platform-db:
