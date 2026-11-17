@@ -10,10 +10,11 @@ Documentação do projeto:
 - [Fase 5 — Guia de infraestrutura AWS CDK](docs/sdd/05-guia-infraestrutura-cdk-implantacao.md)
 - [Fase 6 — Implementação local da infraestrutura CDK](docs/sdd/06-implementacao-infraestrutura-cdk.md)
 - [Deploy AWS de baixo custo — sem Docker](docs/sdd/07-deploy-aws-baixo-custo.md)
+- [Deploy do site na AWS Lightsail com Docker e HTTPS](docs/sdd/08-deploy-lightsail-docker.md)
 
-O projeto CDK em [`infrastructure/`](infrastructure/README.md) contém a infraestrutura-base para AWS; não foi implantado.
+O projeto CDK em [`infrastructure/`](infrastructure/README.md) contém a infraestrutura-base para AWS; não foi implantado. A implantação da aplicação em Lightsail usa o Compose em [`compose.lightsail.yaml`](compose.lightsail.yaml), separado do ambiente local.
 
-A aplicação em [`application/`](application/README.md) inclui uma interface web responsiva para catálogo e operação comercial, com autenticação multiempresa, clientes, equipe e perfis, produtos com variações de tamanho/cor e SKU próprio, compras, estoque, pedidos online sem cobrança, PDV operacional, financeiro básico e auditoria de acessos. Gateways de pagamento, emissão fiscal, WhatsApp/IA e deploy AWS continuam como fases futuras.
+A aplicação em [`application/`](application/README.md) inclui uma interface web responsiva para catálogo e operação comercial, com autenticação multiempresa, clientes, equipe e perfis, produtos com variações de tamanho/cor e SKU próprio, compras, estoque, pedidos online sem cobrança, PDV operacional, financeiro básico e auditoria de acessos. Gateways de pagamento, emissão fiscal e chatbot WhatsApp/IA continuam como fases futuras.
 
 ## Executar localmente no Windows
 

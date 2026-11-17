@@ -36,7 +36,7 @@ docker compose up --build
 
 Abra `http://localhost:3000` e cadastre uma empresa ou entre com uma conta existente. A API fica disponível em `http://localhost:8000`; as migrações PostgreSQL são aplicadas ao iniciar o serviço local. Os dados ficam no volume `platform-db` e podem ser removidos com `docker compose down --volumes`.
 
-Essa configuração é somente para desenvolvimento local: as portas publicadas aceitam conexões apenas de `127.0.0.1`, e a senha e a chave JWT padrão são valores locais de demonstração. Não use esses valores em produção nem exponha esse Compose à Internet. A implantação AWS permanece fora deste procedimento.
+Essa configuração é somente para desenvolvimento local: as portas publicadas aceitam conexões apenas de `127.0.0.1`, e a senha e a chave JWT padrão são valores locais de demonstração. Não use esses valores em produção nem exponha esse Compose à Internet. Para publicar o site na Lightsail, siga o [guia de deploy com Docker e HTTPS](../docs/sdd/08-deploy-lightsail-docker.md).
 
 Na tela inicial, use **Cadastre sua empresa** para criar uma empresa e o primeiro acesso de administradora. Informe nome da empresa, identificador único, nome da administradora, e-mail e senha com pelo menos 12 caracteres. Após o cadastro, a sessão é iniciada automaticamente; os próximos acessos usam e-mail, senha e identificador da empresa. O cadastro está disponível para usuários com acesso ao serviço e não substitui controles de habilitação comercial.
 

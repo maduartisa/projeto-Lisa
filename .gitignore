@@ -157,6 +157,7 @@ activemq-data/
 
 # Environments
 .env
+.env.lightsail
 .envrc
 .venv
 node_modules/
