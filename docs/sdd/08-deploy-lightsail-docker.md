@@ -1,63 +1,67 @@
-# Deploy do site na AWS Lightsail com Docker e HTTPS
+# Deploy na AWS Lightsail por IP com Docker (HTTP)
 
-Este procedimento publica a interface web, a API FastAPI e PostgreSQL na mesma instância Lightsail, com Caddy como proxy HTTPS. Ele usa `compose.lightsail.yaml`; não altera o Compose de desenvolvimento local.
+Este procedimento publica a interface web, a API FastAPI e PostgreSQL na mesma instância Lightsail, usando Docker Compose e Caddy. Não exige domínio: o acesso é feito pelo IPv4 público ou estático da instância na porta 8080:
+
+```text
+http://IP_PUBLICO:8080
+```
+
+O Compose usa a porta 8080 do host para evitar conflito com serviços que já possam ocupar a porta 80. Ele usa `compose.lightsail.yaml` e não altera o Compose de desenvolvimento local.
 
 ## Limites e pré-requisitos
 
-- A captura enviada mostra uma instância com 1 GB de RAM. Migre para um plano com pelo menos 2 GB antes de subir PostgreSQL, API e Next.js juntos. Faça backup/snapshot e confira preço e procedimento de migração no Lightsail.
-- Associe um IPv4 estático à instância e configure um domínio próprio com registro DNS `A` para esse IP. O domínio informado ainda está pendente. Sem DNS apontado e propagado, o Caddy não consegue emitir certificado e o serviço não deve ser publicado.
-- O firewall do Lightsail deve permitir TCP 22 somente a partir do IP do operador e TCP 80/443 publicamente. Não abra 3000, 5432 ou 8000.
+- Esta configuração usa HTTP sem TLS. Não use senhas ou dados reais até configurar um domínio e HTTPS.
+- Para reduzir custos, é possível tentar um plano menor, mas 1 GB de RAM pode ficar limitado ao compilar e executar PostgreSQL, API e Next.js. Monitore memória e disco; se houver falta de memória ou containers instáveis, considere um plano com pelo menos 2 GB.
+- Associe um IPv4 estático à instância para manter o endereço após parar e iniciar a máquina. Confira os custos e as condições do Lightsail.
+- No firewall do Lightsail, permita TCP 22 somente a partir do IP do operador e TCP 8080 para os clientes que acessarão o site. Não abra 3000, 5432 ou 8000.
 - O banco de dados deste piloto fica na mesma instância. Faça backups fora dela e teste restauração; o volume Docker não substitui backup.
-- Este Compose não implementa chatbot ou webhook WhatsApp. A interface atual não é uma integração WhatsApp. Não configure um callback Meta até que o bot, conteúdo de FAQ aprovado e credenciais da Meta estejam implementados e testados.
-- Este guia prepara a implantação; não cria/atualiza recursos na conta AWS.
+- Este Compose não implementa chatbot ou webhook WhatsApp. Não configure um callback Meta até que essas funções estejam implementadas e testadas.
+- Este guia prepara a implantação; não cria nem atualiza recursos na conta AWS.
 
 ## Preparar a instância
 
-Após migrar para uma instância Ubuntu com pelo menos 2 GB de RAM, associe o IP estático e configure o DNS. No provedor DNS, crie um registro `A` para o hostname que será usado, apontando para o IP estático. Aguarde a propagação antes de iniciar o Caddy.
+Crie uma instância Ubuntu no Lightsail, associe o IPv4 estático e configure as regras de firewall descritas acima. Conecte-se por SSH usando a chave privada no seu próprio computador. Não copie nem envie a chave, senhas ou tokens pelo chat.
 
-Conecte-se por SSH usando a chave privada no seu próprio computador. Não envie a chave, senha ou tokens pelo chat. Na instância, instale Docker Compose e Git:
+Na instância, instale Docker Compose e Git:
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose-v2 git
 sudo systemctl enable --now docker
+docker --version
 docker compose version
 ```
 
-Baixe uma versão revisada do repositório em um diretório de implantação. Para um repositório privado, use um método de acesso Git autorizado sem gravar tokens na URL:
+Em uma instalação nova, clone o repositório em um diretório de implantação vazio:
 
 ```bash
 sudo install -d -o "$USER" -g "$USER" /opt/lisa
-git clone https://github.com/maduartisa/projeto-Lisa.git /opt/lisa/app
-cd /opt/lisa/app
+git clone https://github.com/maduartisa/projeto-Lisa.git /opt/lisa/app-lightsail
+cd /opt/lisa/app-lightsail
 ```
 
-## Configurar segredos e hostname
+Para um repositório privado, use um método de acesso Git autorizado sem gravar tokens na URL.
+Se já houver um checkout em `/opt/lisa/app-lightsail`, não clone por cima; entre no diretório existente com `cd /opt/lisa/app-lightsail`.
 
-Gere os segredos na própria instância. O segredo PostgreSQL usa somente caracteres hexadecimais para que possa ser incluído com segurança na URL de conexão:
+## Configurar os segredos
+
+Gere os segredos uma única vez na instância. A senha do PostgreSQL usa somente caracteres hexadecimais para ser segura na URL de conexão:
 
 ```bash
-read -r -p 'Hostname DNS (ex.: app.seudominio.com): ' APP_DOMAIN
 POSTGRES_PASSWORD="$(openssl rand -hex 32)"
 JWT_SECRET_KEY="$(openssl rand -hex 48)"
 umask 077
-printf 'POSTGRES_PASSWORD=%s\nJWT_SECRET_KEY=%s\nAPP_DOMAIN=%s\n' \
-  "$POSTGRES_PASSWORD" "$JWT_SECRET_KEY" "$APP_DOMAIN" > .env.lightsail
-unset POSTGRES_PASSWORD JWT_SECRET_KEY APP_DOMAIN
+printf 'POSTGRES_PASSWORD=%s\nJWT_SECRET_KEY=%s\n' \
+  "$POSTGRES_PASSWORD" "$JWT_SECRET_KEY" > .env.lightsail
+unset POSTGRES_PASSWORD JWT_SECRET_KEY
 chmod 600 .env.lightsail
 ```
 
-O arquivo `.env.lightsail` é ignorado pelo Git e contém segredos. Não o publique nem o envie em logs. Confira que o domínio resolve para o IP estático antes de continuar:
-
-```bash
-getent ahostsv4 app.seudominio.com
-```
-
-Substitua `app.seudominio.com` pelo hostname real. Se a resposta não incluir o IPv4 estático da instância, corrija o DNS e aguarde antes de iniciar o Caddy.
+O arquivo `.env.lightsail` é ignorado pelo Git e contém segredos. Não o publique, não o envie em logs e não gere novos segredos em uma instalação já em uso.
 
 ## Validar e iniciar
 
-Na raiz `/opt/lisa/app`, valide a configuração e compile/suba os serviços:
+Na raiz `/opt/lisa/app-lightsail`, valide a configuração e inicie os serviços:
 
 ```bash
 sudo docker compose --env-file .env.lightsail -f compose.lightsail.yaml config --quiet
@@ -65,30 +69,30 @@ sudo docker compose --env-file .env.lightsail -f compose.lightsail.yaml up --bui
 sudo docker compose --env-file .env.lightsail -f compose.lightsail.yaml ps
 ```
 
-O serviço da API executa `alembic upgrade head` antes de iniciar. PostgreSQL não publica portas no host; API e web só são acessíveis internamente pela rede Docker. Caddy recebe tráfego nas portas 80/443, encaminha à web e solicita/renova o certificado TLS para o domínio configurado.
+A API executa `alembic upgrade head` antes de iniciar. PostgreSQL e API não publicam portas no host. Caddy recebe tráfego na porta 8080 do host, encaminha à interface web na rede Docker e serve HTTP sem certificado TLS.
 
-Verifique a interface e a API pelo HTTPS:
+Verifique a interface e a API na própria instância:
 
 ```bash
-curl --fail --show-error https://app.seudominio.com/
-curl --fail --show-error https://app.seudominio.com/health/ready
+curl --fail --show-error http://127.0.0.1:8080/
+curl --fail --show-error http://127.0.0.1:8080/health/ready
 ```
 
-Troque o hostname pelo domínio real. Em seguida, cadastre uma empresa e uma conta administradora na tela inicial. Use somente dados fictícios até que backups, restauração e controles operacionais tenham sido verificados.
+No navegador, acesse `http://IP_PUBLICO:8080`, substituindo `IP_PUBLICO` pelo IPv4 estático da instância. Use dados fictícios até que HTTPS, backups, restauração e controles operacionais tenham sido configurados e verificados.
 
 ## Operação
 
-Ver logs e estado:
+Ver estado e logs:
 
 ```bash
 sudo docker compose --env-file .env.lightsail -f compose.lightsail.yaml ps
 sudo docker compose --env-file .env.lightsail -f compose.lightsail.yaml logs --tail=100 api web caddy db
 ```
 
-Atualizar o código exige revisão e backup prévio do banco:
+Antes de atualizar, faça backup do banco. Se os arquivos Compose ou Caddyfile tiverem alterações locais, não force o `git pull`; preserve essas alterações e alinhe-as aos arquivos versionados sem substituir `.env.lightsail`.
 
 ```bash
-cd /opt/lisa/app
+cd /opt/lisa/app-lightsail
 git pull --ff-only
 sudo docker compose --env-file .env.lightsail -f compose.lightsail.yaml up --build -d
 ```
@@ -105,4 +109,4 @@ Monitore espaço em disco, memória, logs, custos e a validade dos backups. Test
 
 ## WhatsApp
 
-O chatbot solicitado não está incluído na versão atual: não há webhook Meta, processamento de mensagens ou conteúdo de FAQ confiável. A implantação acima não ativa nem simula essas funções. Para uma fase posterior, será necessário implementar e testar o webhook HTTPS, definir as respostas aprovadas e o encaminhamento humano, criar/configurar o aplicativo Meta e inserir os segredos diretamente no ambiente protegido da instância. Não coloque tokens no repositório nem neste chat.
+O chatbot e o webhook Meta não estão incluídos nesta implantação. Não configure um callback até que o webhook HTTPS, as respostas aprovadas e o encaminhamento humano estejam implementados e testados. Não coloque tokens no repositório nem neste chat.
